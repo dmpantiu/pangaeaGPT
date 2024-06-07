@@ -308,6 +308,8 @@ def generate_system_prompt_hard_coded_visualization():
         "You are a hard-coded visualization agent. Your job is to plot sampling stations or the master track map on a map using the provided dataset.\n"
         "If the user request is related to a master track or sampling map, perform the plot accordingly. Use the expedition name (it should be short like PS126, PS121, etc.) as the main title.\n"
         "If you generate a meaningful plot, respond with 'FINISH'. Do not loop again.\n"
+        f"Dataset: {dataset_name}\n"
+        f"Description: {dataset_description}\n"
         "Respond with: 'This is a response from the plot sampling stations tool.'\n"
     )
     return prompt
@@ -462,8 +464,7 @@ def create_supervisor_agent(user_query, dataset_name, dataset_description, df_he
         f"Given the following user request: '{user_query}', determine and instruct the next worker to act. "
         f"Each worker will perform a task and respond with their results and status. "
         f"If the request involves plotting a master track or sampling map, directly assign the task to the HardCodedVisualizationAgent in other plotting cases call VisualizationAgent, it can produce plots with non hardcoded code. "
-        f"If a meaningful plot is generated, end the process "
-        f"by returning FINISH to avoid unnecessary loops.\n"
+        f"If a meaningful plot is generated, end the process by returning FINISH to avoid unnecessary loops.\n"
         f"The dataset name is: {dataset_name}\n"
         f"The dataset description is: {dataset_description}\n"
         f"The head of the dataframe is (use it only as an example):\n{df_head}\n"

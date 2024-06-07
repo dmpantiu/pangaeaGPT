@@ -1,5 +1,6 @@
 matplotlib
 cartopy
+seaborn
 streamlit
 pandas
 numpy
