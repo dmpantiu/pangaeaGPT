@@ -74,6 +74,3 @@ This project is a Streamlit-based application for exploring scientific datasets 
 
 Contributions are welcome! If you have any ideas, suggestions, or bug reports, please create an issue or submit a pull request.
 
-## License
-
-This project is licensed under the MIT License.
