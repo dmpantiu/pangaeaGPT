@@ -310,7 +310,7 @@ def generate_system_prompt_hard_coded_visualization():
         "If you generate a meaningful plot, respond with 'FINISH'. Do not loop again.\n"
         f"Dataset: {dataset_name}\n"
         f"Description: {dataset_description}\n"
-        "Respond with: 'This is a response from the plot sampling stations tool.'\n"
+        "Respond with: 'This is a response from the plot sampling stations tool. Plot was successfully created.'\n"
     )
     return prompt
 
@@ -362,8 +362,13 @@ def agent_node(state, agent, name):
     state['user_query'] = state.get('input', '')
 
     result = agent.invoke(state)
-    return {"messages": [HumanMessage(content=result["output"], name=name)], "agent_scratchpad": state['agent_scratchpad']}
+    last_message_content = result["output"]
 
+    return {
+        "messages": [HumanMessage(content=last_message_content, name=name)],
+        "agent_scratchpad": state['agent_scratchpad'],
+        "last_agent_message": last_message_content
+    }
 
 class CustomPythonREPLTool(PythonREPLTool):
     def _run(self, query: str, **kwargs) -> Any:
@@ -488,13 +493,15 @@ def create_supervisor_agent(user_query, dataset_name, dataset_description, df_he
             "required": ["next"],
         },
     }
+
     prompt_supervisor = ChatPromptTemplate.from_messages(
         [
             ("system", system_prompt_supervisor),
             MessagesPlaceholder(variable_name="messages"),
             MessagesPlaceholder(variable_name="agent_scratchpad"),
             ("system",
-             "Given the conversation above, who should act next? Or should we FINISH? Select one of: {options}. If the task is related to plots and you receive 'plot was successfully generated', choose 'FINISH'.")
+             f"Given the conversation above, who should act next? Or should we FINISH? Select one of: {options}. If the task is related to plots and you receive 'result: Plot generated successfully.', choose 'FINISH'."
+             f"The last agent message was: {{last_agent_message}}")
         ]
     ).partial(options=str(options), members=", ".join(members))
 
@@ -510,6 +517,7 @@ def create_supervisor_agent(user_query, dataset_name, dataset_description, df_he
         next: str
         agent_scratchpad: Annotated[Sequence[BaseMessage], operator.add]
         user_query: str
+        last_agent_message: str
 
     workflow = StateGraph(AgentState)
     visualization_agent, dataframe_agent, hard_coded_visualization_agent = initialize_agents(user_query)
@@ -531,6 +539,7 @@ def create_supervisor_agent(user_query, dataset_name, dataset_description, df_he
         return graph
     else:
         return None
+
 
 # Process user input
 if st.session_state.current_page == "search":
