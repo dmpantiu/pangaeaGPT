@@ -3,10 +3,8 @@ cartopy
 streamlit
 pandas
 numpy
-os-sys
 xarray
 requests
-warnings
 re
 logging
 openai
