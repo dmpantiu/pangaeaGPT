@@ -9,3 +9,7 @@ openai
 langchain
 tqdm
 pangaeapy
+langchain_openai
+langchain_community
+langchain_experimental
+langgraph
