@@ -5,12 +5,7 @@ pandas
 numpy
 xarray
 requests
-re
-logging
 openai
-json
-operator
-shutil
 langchain
 tqdm
 pangaeapy
