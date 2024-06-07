@@ -501,6 +501,7 @@ def create_supervisor_agent(user_query, dataset_name, dataset_description, df_he
             MessagesPlaceholder(variable_name="agent_scratchpad"),
             ("system",
              f"Given the conversation above, who should act next? Or should we FINISH? Select one of: {options}. If the task is related to plots and you receive 'result: Plot generated successfully.', choose 'FINISH'."
+             f"If the task is just about the dataset, do not call any plotting agents."
              f"The last agent message was: {{last_agent_message}}")
         ]
     ).partial(options=str(options), members=", ".join(members))
