@@ -1,0 +1,31 @@
+# Ignore virtual environments
+.venv/
+
+# Ignore Python cache files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Ignore environment variables
+.env
+
+# Ignore macOS specific files
+.DS_Store
+
+# Ignore PyCharm project files
+.idea/
+
+# Ignore temporary data directories
+current_data/
+plotting_data/
+plotting_tools/temp_files/
+test/
+
+# Ignore Streamlit configuration files
+.streamlit/
+
+#Ignoring save.py
+save.py
+project_structure.txt
+
