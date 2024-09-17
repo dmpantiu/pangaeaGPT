@@ -186,7 +186,7 @@ def answer_publication_questions(doi: str, question: str):
 
         retriever = load_retriever(docstore_path, chroma_path)
 
-        llm = ChatOpenAI(model_name="gpt-4", temperature=0.7)
+        llm = ChatOpenAI(model_name="gpt-4o", temperature=0.7)
         memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
         conversation_chain = ConversationalRetrievalChain.from_llm(
             llm=llm,
