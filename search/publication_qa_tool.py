@@ -1,6 +1,10 @@
 import os
+import re
 import pandas as pd
 import pickle
+import streamlit as st
+import requests
+import pangaeapy.pandataset as pd
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.chat_models import ChatOpenAI
@@ -11,24 +15,18 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.retrievers import ParentDocumentRetriever
 from langchain.storage import InMemoryStore
 from langchain.pydantic_v1 import BaseModel, Field
-import requests
-import pangaeapy.pandataset as pd
-import re
 
 # Set your OpenAI API key
-
 openai_api_key = st.secrets["general"]["openai_api_key"]
 
 # Set the API key for OpenAI
 os.environ["OPENAI_API_KEY"] = openai_api_key
-
 
 class PublicationQAArgs(BaseModel):
     doi: str = Field(
         description="The DOI of the dataset, e.g., 'https://doi.org/10.1594/PANGAEA.xxxxxx'; make sure to get correct doi, based on the history of messages")
     question: str = Field(
         description="The question to ask about the publication related to the dataset. Please modify the original question of the user! The question should be reworded to specifically send it to RAG. I.e. the original user question 'Are there any related articles to the first dataset? If so what these articles are about?' will be reworded for this tool as 'What is this article about?' Always add at the end to give extended response with great depth and clarity.")
-
 
 def get_related_publication_info(doi):
     try:
@@ -59,12 +57,10 @@ def get_related_publication_info(doi):
         print(f"Error fetching related publication: {str(e)}")
         return None
 
-
 def create_pdf_filename(doi):
     if doi:
         return re.sub(r"[\/]", "_", doi) + ".pdf"
     return None
-
 
 def download_pdf_from_crossref(doi):
     crossref_url = f'https://api.crossref.org/works/{doi}'
@@ -96,8 +92,9 @@ def download_pdf_from_crossref(doi):
             pdf_response.raise_for_status()
 
             safe_filename = create_pdf_filename(doi)
-            pdf_path = os.path.join(
-                '/pangaea_clean_crazy_test_langgraph/publication_database', safe_filename)
+            publication_database = os.path.join(os.getcwd(), 'publication_database')
+            os.makedirs(publication_database, exist_ok=True)
+            pdf_path = os.path.join(publication_database, safe_filename)
 
             with open(pdf_path, 'wb') as f:
                 f.write(pdf_response.content)
@@ -108,16 +105,13 @@ def download_pdf_from_crossref(doi):
         print(f"Error downloading PDF: {str(e)}")
     return None
 
-
 def save_to_pickle(obj, filename):
     with open(filename, "wb") as file:
         pickle.dump(obj, file, pickle.HIGHEST_PROTOCOL)
 
-
 def load_from_pickle(filename):
     with open(filename, "rb") as file:
         return pickle.load(file)
-
 
 def create_embeddings(pdf_path):
     loader = PyPDFLoader(pdf_path)
@@ -148,7 +142,6 @@ def create_embeddings(pdf_path):
 
     return chroma_path, docstore_path
 
-
 def load_retriever(docstore_path, chroma_path):
     embeddings = OpenAIEmbeddings()
     parent_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=500)
@@ -171,7 +164,6 @@ def load_retriever(docstore_path, chroma_path):
 
     return retriever
 
-
 def answer_publication_questions(doi: str, question: str):
     related_doi = get_related_publication_info(doi)
 
@@ -179,8 +171,9 @@ def answer_publication_questions(doi: str, question: str):
         return "No publications related to this dataset were found."
 
     pdf_filename = create_pdf_filename(related_doi)
-    chroma_path = f'/pangaea_clean_crazy_test_langgraph/publication_database/{pdf_filename.replace(".pdf", "_chroma")}'
-    docstore_path = f'/pangaea_clean_crazy_test_langgraph/publication_database/{pdf_filename.replace(".pdf", "_docstore.pkl")}'
+    publication_database = os.path.join(os.getcwd(), 'publication_database')
+    chroma_path = os.path.join(publication_database, pdf_filename.replace(".pdf", "_chroma"))
+    docstore_path = os.path.join(publication_database, pdf_filename.replace(".pdf", "_docstore.pkl"))
 
     try:
         if not os.path.exists(chroma_path) or not os.path.exists(docstore_path):
@@ -193,7 +186,7 @@ def answer_publication_questions(doi: str, question: str):
 
         retriever = load_retriever(docstore_path, chroma_path)
 
-        llm = ChatOpenAI(model_name="gpt-4o", temperature=0.7)
+        llm = ChatOpenAI(model_name="gpt-4", temperature=0.7)
         memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
         conversation_chain = ConversationalRetrievalChain.from_llm(
             llm=llm,
@@ -204,6 +197,6 @@ def answer_publication_questions(doi: str, question: str):
         response = conversation_chain({"question": question})
         return response['answer']
 
-    except ValueError as e:
+    except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
         return f"An error occurred while processing your request: {str(e)}"

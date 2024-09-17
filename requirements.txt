@@ -18,3 +18,5 @@ tqdm==4.66.5
 xarray==2024.7.0
 gsw==3.6.19
 adjustText==1.2.0
+pypdf==4.3.1
+chromadb==0.5.5
