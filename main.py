@@ -1,15 +1,11 @@
 # 1. Imports
 import streamlit as st
-import requests
 import pandas as pd
 import warnings
 import re
 import os
 import logging
-import logging
 from datetime import datetime
-import openai
-import json
 import operator
 import shutil
 import uuid
@@ -18,24 +14,20 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers.openai_functions import JsonOutputFunctionsParser
 from langchain_core.messages import BaseMessage
 from langchain_openai import ChatOpenAI
-from langchain_community.tools import Tool
 from langchain_core.messages import HumanMessage
-from langchain_core.utils.function_calling import convert_to_openai_function
 from langchain_experimental.agents.agent_toolkits.pandas.base import create_pandas_dataframe_agent
 from langchain_experimental.tools.python.tool import PythonREPLTool
 from io import StringIO
-import pangaeapy.pandataset as pdataset
-from PIL import Image
 import matplotlib.pyplot as plt
-from typing import Optional, Any
+from typing import Any
 import functools
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END
 from typing import List, Annotated, Sequence, TypedDict
 from plotting_tools.hard_agent import plot_sampling_stations, plot_master_track_map
 from plotting_tools.oceanographer_tools import plot_ctd_profiles, plot_ts_diagram
 from langchain_core.tools import BaseTool
-from langchain.pydantic_v1 import BaseModel, Field
-from langchain.tools import StructuredTool
+from pydantic import BaseModel, Field
+from langchain_core.tools import StructuredTool
 from search.search_pg_es import search_pg_es
 from search.search_pg_default import pg_search_default
 from search.dataset_utils import fetch_dataset, convert_df_to_csv
@@ -47,7 +39,6 @@ from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputP
 #comment out later
 #Graph visualization imports
 from langgraph.graph import StateGraph
-from langchain_core.runnables.graph import CurveStyle, MermaidDrawMethod
 #/comment out later
 
 
@@ -59,31 +50,15 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from search.publication_qa_tool import answer_publication_questions, PublicationQAArgs
 
 
-#1.1 UI (Visualization)
+#1. Streamlit app setup
 # Streamlit app setup
 st.set_page_config(
     page_title="PANGAEA GPT",
     page_icon="img/pangaea-logo.png",
     layout="wide"
 )
-st.markdown(
-    """
-    <style>
-        [data-testid=stSidebar] [data-testid=stImage]{
-            text-align: center;
-            display: block;
-            margin-left: auto;
-            margin-right: auto;
-            width: 100%;
-        }
-    </style>
-    """, unsafe_allow_html=True
-)
-# Load the logo
-st.sidebar.image("img/pangaea-logo.png", width=100)
 
-
-# Main title with custom font
+# Main title with custom font, adjusted sidebar image CSS, and hidden fullscreen button
 st.markdown(
     """
     <style>
@@ -91,7 +66,7 @@ st.markdown(
             text-align: center; 
             font-weight: bold; 
             font-family: 'Open Sans', 'Helvetica Neue', sans-serif; 
-            padding-top: 1rem;  /* Add padding to separate from the other elements */
+            padding-top: 1rem;
             padding-bottom: 1rem;
             font-size: 31.5px;
         }
@@ -99,24 +74,34 @@ st.markdown(
             text-align: center; 
             font-weight: bold; 
             font-family: 'Open Sans', 'Helvetica Neue', sans-serif; 
-            padding-top: 0.5rem;  /* Add padding to separate from the other elements */
-            font-size: 24px;  /* Make the H2 title smaller */
+            padding-top: 0.5rem;
+            font-size: 24px;
         }
         [data-testid=stSidebar] [data-testid=stImage] {
             text-align: center;
             display: block;
             margin-left: auto;
             margin-right: auto;
-            width: 100%;
+            width: auto;  /* Changed to auto */
+            max-width: 99px;  /* Reduced maximum width */
+        }
+        /* Hide fullscreen button */
+        button[title="View fullscreen"] {
+            display: none;
+        }
+        /* Adjust sidebar width */
+        [data-testid=stSidebar] {
+            width: 17%;
         }
     </style>
     """, unsafe_allow_html=True
 )
 
+# Load the logo
+st.sidebar.image("img/pangaea-logo.png", use_column_width=False)
 
 # Main title
 st.markdown("# PANGAEA GPT")
-PANGAEA_LOGO = "img/pangaea-logo.png"
 SYSTEM_ICON = "img/11111111.png"
 USER_ICON = "img/2222222.png"
 
@@ -717,8 +702,8 @@ def agent_node(state, agent, name):
         "messages": [HumanMessage(content=last_message_content, name=name)],
         "next": name,
         "agent_scratchpad": state['agent_scratchpad'],
-        "last_agent_message": last_message_content,
-        "plot_images": state['plot_images']  # Use the plot_images from the state
+        "last_agent_message": last_message_content,  # Add this line
+        "plot_images": state['plot_images']
     }
 
 
@@ -780,7 +765,12 @@ def create_supervisor_agent(user_query, dataset_name, dataset_description, df_he
 
     # Create the supervisor chain
     supervisor_chain = (
-            prompt_supervisor
+            {
+                "messages": lambda x: x["messages"],
+                "agent_scratchpad": lambda x: x["agent_scratchpad"],
+                "last_agent_message": lambda x: x.get("last_agent_message", ""),  # Add this line
+            }
+            | prompt_supervisor
             | llm_supervisor.bind_functions(functions=[function_def], function_call="route")
             | JsonOutputFunctionsParser()
     )
@@ -791,7 +781,7 @@ def create_supervisor_agent(user_query, dataset_name, dataset_description, df_he
         next: str
         agent_scratchpad: Annotated[Sequence[BaseMessage], operator.add]
         user_query: str
-        last_agent_message: str
+        last_agent_message: str  # Add this line if it's not already there
         plot_images: List[str]
 
     # Create the workflow graph
@@ -1010,7 +1000,8 @@ if st.session_state.current_page == "data_agent":
                     "next": "supervisor",
                     "agent_scratchpad": [],
                     "input": user_input,
-                    "plot_images": []
+                    "plot_images": [],
+                    "last_agent_message": ""
                 }
                 logging.debug(f"Initial state before invoking graph: {initial_state}")
                 try:
