@@ -55,7 +55,7 @@ from .utils import generate_unique_image_path, sanitize_input, get_last_python_r
 #from utils import generate_unique_image_path, sanitize_input, get_last_python_repl_command
 
 #0 - Load the API key
-api_key = st.secrets["general"]["openai_api_key"]
+#api_key = st.secrets["general"]["openai_api_key"]
 
 
 
@@ -141,9 +141,9 @@ def search_pg_datasets_tool(query):
 
     return datasets_info, prompt_search
 
-def create_search_agent(datasets_info=None):
+def create_search_agent(api_key, datasets_info=None):
     model_name = st.session_state.get("model_name", "gpt-3.5-turbo")  # Default to "gpt-3.5-turbo" if not set
-    api_key = st.secrets["general"]["openai_api_key"]
+    #api_key = st.secrets["general"]["openai_api_key"]
     llm = ChatOpenAI(api_key=api_key, model_name=model_name)
 
     # Generate dataset description string
@@ -247,10 +247,10 @@ def plot_ts_diagram_tool(main_title, temperature_col, salinity_col, dataset_df, 
 
 
 # 3. Agent Creation Functions
-def create_pandas_agent(user_query, dataset_name, dataset_description, df_head):
+def create_pandas_agent(api_key, user_query, dataset_name, dataset_description, df_head):
     #from prompts import generate_pandas_agent_system_prompt
     prompt = generate_pandas_agent_system_prompt(user_query, dataset_name, dataset_description, df_head)
-    llm = ChatOpenAI(api_key=st.secrets["general"]["openai_api_key"], model_name=st.session_state.model_name)
+    llm = ChatOpenAI(api_key=api_key, model_name=st.session_state.model_name)
     agent_pandas = create_pandas_dataframe_agent(
         llm=llm,
         df=st.session_state.dataset_df,
@@ -288,6 +288,7 @@ def reflect_on_image(image_path: str) -> str:
 
 Please provide a structured review addressing each of these points. Conclude with an overall assessment of the image quality, highlighting any significant issues or exemplary aspects. Finally, give the image a score out of 10, where 10 is perfect quality and 1 is unusable.
 """
+    api_key = os.getenv("OPENAI_API_KEY")
     openai_client = OpenAI(api_key=api_key)
     response = openai_client.chat.completions.create(
         model="gpt-4o",
@@ -380,7 +381,8 @@ def get_example_of_visualizations(query: str) -> str:
     - str: The content of the most relevant example file.
     """
     # Initialize embeddings
-    api_key = st.secrets["general"]["openai_api_key"]
+    #api_key = st.secrets["general"]["openai_api_key"]
+    api_key = os.getenv("OPENAI_API_KEY")
     embeddings = OpenAIEmbeddings(api_key=api_key)
 
     # Load the existing vector store
@@ -422,9 +424,9 @@ example_visualization_tool = StructuredTool.from_function(
 
 
 
-def create_visualization_agent(user_query, dataset_name, dataset_description, df_head):
+def create_visualization_agent(api_key, user_query, dataset_name, dataset_description, df_head):
     model_name = st.session_state.get("model_name", "gpt-3.5-turbo")
-    api_key = st.secrets["general"]["openai_api_key"]
+    #api_key = st.secrets["general"]["openai_api_key"]
     prompt = generate_visualization_agent_system_prompt(
         user_query, dataset_name, dataset_description, df_head
     )
@@ -456,10 +458,10 @@ def create_visualization_agent(user_query, dataset_name, dataset_description, df
     )
 
 
-def create_hard_coded_visualization_agent(dataset_name, dataset_description, df_head):
+def create_hard_coded_visualization_agent(api_key, dataset_name, dataset_description, df_head):
     import streamlit as st  # Import st inside the function
     model_name = st.session_state.get("model_name", "gpt-3.5-turbo")
-    api_key = st.secrets["general"]["openai_api_key"]
+    #api_key = st.secrets["general"]["openai_api_key"]
     llm = ChatOpenAI(api_key=api_key, model_name=model_name)
 
     system_prompt = generate_system_prompt_hard_coded_visualization(dataset_name, dataset_description, df_head)
@@ -503,10 +505,10 @@ def create_hard_coded_visualization_agent(dataset_name, dataset_description, df_
 
 # Create Oceanographer Agent
 
-def create_oceanographer_agent(dataset_name, dataset_description, df_head):
+def create_oceanographer_agent(api_key, dataset_name, dataset_description, df_head):
     import streamlit as st  # Import st inside the function
     model_name = st.session_state.get("model_name", "gpt-3.5-turbo")
-    api_key = st.secrets["general"]["openai_api_key"]
+    #api_key = st.secrets["general"]["openai_api_key"]
     llm = ChatOpenAI(api_key=api_key, model_name=model_name)
 
     system_prompt = generate_system_prompt_oceanographer(dataset_name, dataset_description, df_head)
@@ -546,7 +548,7 @@ def create_oceanographer_agent(dataset_name, dataset_description, df_head):
     return AgentExecutor(agent=agent, tools=oceanography_functions)
 
 
-def initialize_agents(user_query):
+def initialize_agents(api_key, user_query):
     if st.session_state.dataset_df is not None:
         # Extract necessary information
         df_head = st.session_state.dataset_df.head().to_string()
@@ -555,32 +557,11 @@ def initialize_agents(user_query):
             st.session_state.datasets_info['DOI'] == st.session_state.active_dataset, 'Description'
         ].values[0]
 
-        # Create agents
-        visualization_agent = create_visualization_agent(
-            user_query=user_query,
-            dataset_name=dataset_name,
-            dataset_description=dataset_description,
-            df_head=df_head
-        )
-
-        dataframe_agent = create_pandas_agent(
-            user_query=user_query,
-            dataset_name=dataset_name,
-            dataset_description=dataset_description,
-            df_head=df_head
-        )
-
-        hard_coded_visualization_agent = create_hard_coded_visualization_agent(
-            dataset_name=dataset_name,
-            dataset_description=dataset_description,
-            df_head=df_head
-        )
-
-        oceanographer_agent = create_oceanographer_agent(
-            dataset_name=dataset_name,
-            dataset_description=dataset_description,
-            df_head=df_head
-        )
+        # Create agents with api_key
+        visualization_agent = create_visualization_agent(api_key, user_query, dataset_name, dataset_description, df_head)
+        dataframe_agent = create_pandas_agent(api_key, user_query, dataset_name, dataset_description, df_head)
+        hard_coded_visualization_agent = create_hard_coded_visualization_agent(api_key, dataset_name, dataset_description, df_head)
+        oceanographer_agent = create_oceanographer_agent(api_key, dataset_name, dataset_description, df_head)
 
         return visualization_agent, dataframe_agent, hard_coded_visualization_agent, oceanographer_agent
     else:
@@ -677,7 +658,7 @@ def agent_node(state, agent, name):
     }
 
 
-def create_supervisor_agent(user_query, dataset_name, dataset_description, df_head):
+def create_supervisor_agent(api_key, user_query, dataset_name, dataset_description, df_head):
     # Define the members (agents) involved in the workflow
     members = ["VisualizationAgent", "DataFrameAgent", "HardCodedVisualizationAgent", "OceanographerAgent"]
 
@@ -757,8 +738,7 @@ def create_supervisor_agent(user_query, dataset_name, dataset_description, df_he
 
     # Create the workflow graph
     workflow = StateGraph(AgentState)
-    visualization_agent, dataframe_agent, hard_coded_visualization_agent, oceanographer_agent = initialize_agents(
-        user_query)
+    visualization_agent, dataframe_agent, hard_coded_visualization_agent, oceanographer_agent = initialize_agents(api_key, user_query)
 
     # Add agents to the workflow if they are successfully initialized
     if visualization_agent and dataframe_agent and hard_coded_visualization_agent and oceanographer_agent:
@@ -786,7 +766,7 @@ def create_supervisor_agent(user_query, dataset_name, dataset_description, df_he
         graph = workflow.compile()
 
         # Define the output folder for saving the graph visualization
-        output_folder = os.path.join(os.getcwd(), 'plotting_tools', 'temp_files')
+        output_folder = os.path.join(os.getcwd(), 'tmp', 'figs')
 
         # Save the graph visualization
         #save_graph_visualization(graph, output_folder)

@@ -15,14 +15,15 @@ from langchain.storage import InMemoryStore
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 import requests
+import logging
 import pangaeapy.pandataset as pd
 import re
 
 # Set your OpenAI API key
-openai_api_key = st.secrets["general"]["openai_api_key"]
+#openai_api_key = st.secrets["general"]["openai_api_key"]
 
 # Set the API key for OpenAI
-os.environ["OPENAI_API_KEY"] = openai_api_key
+#os.environ["OPENAI_API_KEY"] = openai_api_key
 
 
 class PublicationQAArgs(BaseModel):
@@ -122,7 +123,7 @@ def load_from_pickle(filename):
         return pickle.load(file)
 
 
-def create_embeddings(pdf_path):
+def create_embeddings(api_key, pdf_path):
     loader = PyPDFLoader(pdf_path)
     documents = loader.load()
 
@@ -130,7 +131,7 @@ def create_embeddings(pdf_path):
     child_splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=50)
 
     store = InMemoryStore()
-    embeddings = OpenAIEmbeddings()
+    embeddings = OpenAIEmbeddings(api_key=api_key)
 
     chroma_path = pdf_path.replace('.pdf', '_chroma')
     vectorstore = Chroma(collection_name="full_documents",
@@ -152,8 +153,8 @@ def create_embeddings(pdf_path):
     return chroma_path, docstore_path
 
 
-def load_retriever(docstore_path, chroma_path):
-    embeddings = OpenAIEmbeddings()
+def load_retriever(api_key, docstore_path, chroma_path):
+    embeddings = OpenAIEmbeddings(api_key=api_key)
     parent_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=500)
     child_splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=50)
 
@@ -176,6 +177,21 @@ def load_retriever(docstore_path, chroma_path):
 
 
 def answer_publication_questions(doi: str, question: str):
+    """
+    Answers questions about publications related to a dataset.
+
+    Parameters:
+    - doi (str): The DOI of the dataset.
+    - question (str): The user's question about the publication.
+
+    Returns:
+    - str: The answer to the user's question.
+    """
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        logging.error("OpenAI API key not found in environment variables.")
+        raise ValueError("OpenAI API key not set in environment variables.")
+
     related_doi = get_related_publication_info(doi)
 
     if not related_doi:
@@ -193,11 +209,11 @@ def answer_publication_questions(doi: str, question: str):
             if not pdf_path:
                 return "Unable to download the related publication PDF."
 
-            chroma_path, docstore_path = create_embeddings(pdf_path)
+            chroma_path, docstore_path = create_embeddings(api_key, pdf_path)
 
-        retriever = load_retriever(docstore_path, chroma_path)
+        retriever = load_retriever(api_key, docstore_path, chroma_path)
 
-        llm = ChatOpenAI(model_name="gpt-4", temperature=0.7)
+        llm = ChatOpenAI(api_key=api_key, model_name="gpt-4", temperature=0.7)
         memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
         conversation_chain = ConversationalRetrievalChain.from_llm(
             llm=llm,
@@ -209,5 +225,5 @@ def answer_publication_questions(doi: str, question: str):
         return response['answer']
 
     except Exception as e:
-        print(f"An unexpected error occurred: {str(e)}")
+        logging.error(f"An unexpected error occurred: {str(e)}")
         return f"An error occurred while processing your request: {str(e)}"

@@ -10,9 +10,9 @@ except ImportError:
 
 
 #import os
-openai_api_key = os.environ.get('OPENAI_API_KEY') or input("Please enter your OpenAI API key: ")
-langchain_api_key = os.environ.get('LANGCHAIN_API_KEY') or input("Please enter your LangChain API key (optional): ")
-langchain_project_name = os.environ.get('LANGCHAIN_PROJECT_NAME') or input("Please enter your LangChain project name (optional): ")
+#openai_api_key = os.environ.get('OPENAI_API_KEY') or input("Please enter your OpenAI API key: ")
+#langchain_api_key = os.environ.get('LANGCHAIN_API_KEY') or input("Please enter your LangChain API key (optional): ")
+#langchain_project_name = os.environ.get('LANGCHAIN_PROJECT_NAME') or input("Please enter your LangChain project name (optional): ")
 
 
 
@@ -89,22 +89,22 @@ print("All required shapefiles and bathymetry data downloaded, extracted, and zi
 def sanitize_input(input_str):
     return ''.join(c for c in str(input_str) if ord(c) < 128) if input_str else ""
 
-openai_api_key = sanitize_input(openai_api_key)
-langchain_api_key = sanitize_input(langchain_api_key)
-langchain_project_name = sanitize_input(langchain_project_name)
+#openai_api_key = sanitize_input(openai_api_key)
+#langchain_api_key = sanitize_input(langchain_api_key)
+#langchain_project_name = sanitize_input(langchain_project_name)
 
 # Create secrets.toml file
-secrets_dir = os.path.join(os.getcwd(), '.streamlit')
-os.makedirs(secrets_dir, exist_ok=True)
-secrets_path = os.path.join(secrets_dir, 'secrets.toml')
+#secrets_dir = os.path.join(os.getcwd(), '.streamlit')
+#os.makedirs(secrets_dir, exist_ok=True)
+#secrets_path = os.path.join(secrets_dir, 'secrets.toml')
 
-with open(secrets_path, 'w') as f:
-    f.write("[general]\n")
-    if openai_api_key:
-        f.write(f"openai_api_key = \"{openai_api_key}\"\n")
-    if langchain_api_key:
-        f.write(f"langchain_api_key = \"{langchain_api_key}\"\n")
-    if langchain_project_name:
-        f.write(f"langchain_project_name = \"{langchain_project_name}\"\n")
+#with open(secrets_path, 'w') as f:
+#    f.write("[general]\n")
+#    if openai_api_key:
+#        f.write(f"openai_api_key = \"{openai_api_key}\"\n")
+#    if langchain_api_key:
+#        f.write(f"langchain_api_key = \"{langchain_api_key}\"\n")
+#    if langchain_project_name:
+#        f.write(f"langchain_project_name = \"{langchain_project_name}\"\n")
 
-print("API keys and project name saved to secrets.toml.")
+#print("API keys and project name saved to secrets.toml.")

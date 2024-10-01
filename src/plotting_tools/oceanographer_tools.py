@@ -8,7 +8,7 @@ import gsw
 from matplotlib.ticker import MaxNLocator
 import logging
 
-output_file = os.path.join('src', 'plotting_tools', 'temp_files', 'plot.png')
+#output_file = os.path.join('tmp', 'figs', 'plot.png')
 
 
 import uuid

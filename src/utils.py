@@ -13,11 +13,9 @@ import streamlit as st
 def generate_unique_image_path():
     figs_dir = os.path.join('tmp', 'figs')
     os.makedirs(figs_dir, exist_ok=True)
-    unique_filename = f'fig_{uuid.uuid4()}.png'
-    unique_path = os.path.join(figs_dir, unique_filename)
+    unique_path = os.path.join(figs_dir, f'fig_{uuid.uuid4()}.png')
     logging.debug(f"Generated unique image path: {unique_path}")
     return unique_path
-
 
 # Function to sanitize input
 def sanitize_input(query: str) -> str:

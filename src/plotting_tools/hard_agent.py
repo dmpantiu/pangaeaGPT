@@ -208,7 +208,7 @@ def plot_sampling_stations(main_title, lat_col, lon_col, dataset_df):
     cbar = plt.colorbar(bathy_plot, cax=cax, orientation='vertical', label='Depth (m)')
 
     # Ensure temp_files directory exists
-    plot_dir = os.path.join('data', 'plotting_tools', 'temp_files')
+    plot_dir = os.path.join('tmp', 'figs')
     if not os.path.exists(plot_dir):
         os.makedirs(plot_dir)
 

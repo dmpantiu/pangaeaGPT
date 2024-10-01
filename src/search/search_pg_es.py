@@ -90,5 +90,3 @@ def search_pg_es(query):
     #/Comment out later
 
     return df_datasets
-
-
