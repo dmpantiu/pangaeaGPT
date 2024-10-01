@@ -1,0 +1,28 @@
+--- Cell 1 ---
+Basic 2 - dataframe.ipynb
+
+--- Cell 2 ---
+#Basic pangaeapy example: dataframe
+
+--- Cell 3 ---
+from pangaeapy import PanDataSet
+
+--- Cell 4 ---
+ds=PanDataSet(896621)
+
+--- Cell 5 ---
+#After the dataset object has been instantiated, the data can be accessed using standard pandas data frame methods. Let's look at the first rows of data with head()
+
+--- Cell 6 ---
+ds.data.head()
+
+--- Cell 7 ---
+#Now we can take a look at some basic statistics of the data with describe()
+ds.data.describe()
+
+--- Cell 8 ---
+ds.citation
+
+--- Cell 9 ---
+
+

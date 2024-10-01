@@ -1,0 +1,47 @@
+--- Cell 1 ---
+Advanced - Smoothing.ipynb
+
+--- Cell 2 ---
+from pangaeapy import PanDataSet
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.interpolate import interp1d
+
+--- Cell 3 ---
+ds=PanDataSet(894182)
+
+--- Cell 4 ---
+ds.data.head()
+
+--- Cell 5 ---
+#Smoothing with Scipy's interp1d quadratic spline function
+#Bet
+x=ds.data['Age']
+y=ds.data['Bet']
+
+f = interp1d(x, y, kind='quadratic')
+
+#setting the number of x values for oversampling
+xnew = np.linspace(min(x),max(x) ,2000)
+
+plt.figure(figsize = (12,5))
+plt.plot(x, y, 'o', xnew, f(xnew), '-')
+plt.xlabel('xlabel')
+#plt.plot(x_smooth, y_spline, 'red', linewidth=1)
+
+--- Cell 6 ---
+#Smooting with Scipy's UnivariateSpline
+from scipy.interpolate import UnivariateSpline
+f2 = UnivariateSpline(x, y)
+plt.figure(figsize = (12,5))
+plt.plot(x, y, 'o',xnew, f2(xnew), '-')
+
+--- Cell 7 ---
+#Making the line very smooth by setting the smoothness factor
+f2.set_smoothing_factor(20000)
+plt.figure(figsize = (12,5))
+plt.plot(x, y, 'o',xnew, f2(xnew), '-')
+
+--- Cell 8 ---
+
+

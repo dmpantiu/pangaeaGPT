@@ -1,0 +1,258 @@
+--- Cell 1 ---
+BGC_region_float_data.ipynb
+
+--- Cell 2 ---
+<img src="https://raw.githubusercontent.com/euroargodev/argopy/master/docs/_static/argopy_logo_long.png" alt="argopy logo" width="200"/> 
+
+# Download and visualise BGC data over an ocean region
+
+This notebook shows how to:
+- download BGC-Argo data for a space/time domain
+- plot a map with floats trajectory
+- plot BGC data
+
+--- Cell 3 ---
+## Import and set-up
+
+--- Cell 4 ---
+from argopy import DataFetcher  # This is the class to work with Argo data
+from argopy import ArgoIndex  #  This is the class to work with Argo index
+from argopy import ArgoNVSReferenceTables  # This is the class to retrieve data from Argo reference tables
+from argopy import ArgoColors  # This is a class with usefull pre-defined colors
+from argopy.plot import scatter_map, scatter_plot  # This is a function to easily make maps 
+
+# Make a fresh start
+import argopy
+argopy.reset_options()
+argopy.clear_cache()
+argopy.set_options(cachedir='cache_bgc')
+
+#
+import numpy as np
+import matplotlib as mpl
+from matplotlib import pyplot as plt
+import cmocean
+import xarray as xr
+xr.set_options(display_expand_attrs = False)
+
+--- Cell 5 ---
+import logging
+logging.getLogger("matplotlib").setLevel(logging.ERROR)
+logging.getLogger("pyproj").setLevel(logging.ERROR)
+logging.getLogger("fsspec").setLevel(logging.ERROR)
+logging.getLogger("parso").setLevel(logging.ERROR)
+logging.getLogger("asyncio").setLevel(logging.ERROR)
+DEBUGFORMATTER = '%(asctime)s [%(levelname)s] [%(name)s] %(filename)s:%(lineno)d: %(message)s'
+logging.basicConfig(
+    level=logging.DEBUG,
+    format=DEBUGFORMATTER,
+    datefmt='%I:%M:%S %p',
+    handlers=[logging.FileHandler("nb-docs.log", mode='w')]
+)
+
+--- Cell 6 ---
+## Define an ocean region to work with
+
+For this demo notebook, we'll work with BGC floats in the Labrador Sea
+
+For your own use, you can simply overwrite the ``BOX`` variable content with your region.
+
+--- Cell 7 ---
+# Format: [lon_min, lon_max, lat_min, lat_max, pres_min, pres_max, datim_min, datim_max]
+BOX = [-56, -45, 54, 60, 0, 2000, '2022-01', '2023-01']
+# BOX = [-56, -45, 54, 60, 0, 2000, '2022-09', '2023-01']
+BOX = [-56, -45, 54, 60, 0, 500, '2019-01', '2023-01']
+# BOX = [-75, -62, 38, 42, 0, 2000, '2021-01', '2022-01']
+
+--- Cell 8 ---
+## Get more info about this region using the ArgoIndex
+
+--- Cell 9 ---
+# Load the BGC-synthetic profiles index
+# rq: we work with synthetic profiles because that's the only dataset available from the erddap at this point (2023/07/21)
+idx = ArgoIndex(index_file='bgc-s').load()  
+idx
+
+--- Cell 10 ---
+# Select profile in a space/time domain:
+index_BOX = [BOX[ii] for ii in [0, 1, 2, 3, 6, 7]]  # We don't want the pressure axis BOX limits
+idx.search_lat_lon_tim(index_BOX)
+
+--- Cell 11 ---
+# Get the list of all parameters for this region:
+idx.read_params()
+
+--- Cell 12 ---
+# Extract the list of BGC parameters:
+bgc_params = idx.read_params()
+[bgc_params.remove(p) for p in ['PRES', 'TEMP', 'PSAL']]  # Remove core variables from the list
+bgc_params
+
+--- Cell 13 ---
+# How many different floats in the region:
+len(idx.read_wmo())
+
+--- Cell 14 ---
+## Load all data from this region
+
+- If the BOX has a lot of profiles, the request can take up to a few minutes.  
+In the following ``DataFetcher`` command, we use the ``parallel`` option to chunk the requests into a collection of smaller domains (with a maximum length of 30 days)
+
+--- Cell 15 ---
+%%time
+# f = DataFetcher(ds='bgc', mode='expert', params='all', parallel=True, progress=True).region(BOX).load()  # Fetch everything !
+f = DataFetcher(ds='bgc', mode='expert', params='all',
+                parallel=True, progress=True, cache=False,
+                chunks_maxsize={'time': 30},
+               )
+f = f.region(BOX).load()
+f
+
+--- Cell 16 ---
+# Check the data structure (xarray.dataset):
+ds = f.data
+ds
+
+--- Cell 17 ---
+# Check the data through the argo xarray accessor:
+ds.argo
+
+--- Cell 18 ---
+# and check the corresponding index structure (pandas.dataframe):
+df = f.index
+df
+
+--- Cell 19 ---
+## Make a map with all floats trajectory
+
+Rq: we could have done this without downloading the data by working directly with the ArgoIndex
+
+```python
+scatter_map(idx.to_dataframe(), set_global=False);
+```
+
+--- Cell 20 ---
+# But here, we use the index retrieved with the DataFetcher:
+scatter_map(df, traj=False, set_global=False, legend=False);
+
+--- Cell 21 ---
+## Make a map with one BGC parameter data mode
+
+--- Cell 22 ---
+We can also make a scatter map with one BGC parameter data mode.
+
+--- Cell 23 ---
+# Randomly select one BGC parameter to work with:
+a_param = bgc_params[np.random.randint(len(bgc_params))]
+a_param
+
+--- Cell 24 ---
+# Get more verbose information about this parameter (usefull for plot titles):
+reftbl = ArgoNVSReferenceTables().tbl('R03')
+param_info = reftbl[reftbl['altLabel']==a_param].iloc[0].to_dict()
+param_info
+
+--- Cell 25 ---
+# To make the scatter map, we need to have the data mode available in one DataFrame column
+# so we need to add a new column with the DATA_MODE of the PARAMETER:
+df["variables"] = df["parameters"].apply(lambda x: x.split())
+df["%s_DM" % a_param] = df.apply(lambda x: x['parameter_data_mode'][x['variables'].index(a_param)] if a_param in x['variables'] else '', axis=1)
+
+--- Cell 26 ---
+np.unique(df["%s_DM" % a_param])
+
+--- Cell 27 ---
+# Finally plot the map:
+fig, ax = scatter_map(df,
+                        hue="%s_DM" % a_param,
+                        cmap="data_mode",
+                        markersize=24,
+                        markeredgecolor='w',
+                        traj_color='gray',
+                        legend_title='Data mode')
+ax.set_title("Data mode for %s (%s)\n%i profiles from the %s\n%i profiles downloaded" % (param_info['prefLabel'], a_param, 
+                                                                           idx.N_MATCH, idx.convention_title, df.shape[0]));
+
+--- Cell 28 ---
+**Rq**: If some points have no data mode in the above map, it simply means that these profiles have not the request parameters
+
+--- Cell 29 ---
+## Plot 
+
+--- Cell 30 ---
+### Utilities
+
+We will be using the argopy scatter_plot method that has the following signature:
+
+```
+scatter_plot(
+    ds: xarray.core.dataset.Dataset,
+    this_param,
+    this_x='TIME',
+    this_y='PRES',
+    figsize=(18, 6),
+    cmap=None,
+    vmin=None,
+    vmax=None,
+    s=4,
+)
+```
+
+--- Cell 31 ---
+# Try to define readible color bounds for each BGC variables 
+# (this is probably NOT appropriate for all regions and periods !)
+c_bounds = {'BBP700': (20e-5, 70e-5),
+            'CDOM': (0.4, 0.8),
+            'CHLA': (0, 0.2),
+            'DOWNWELLING_PAR': (0, 10),
+            'DOWN_IRRADIANCE380': (0, .1),
+            'DOWN_IRRADIANCE412': (0, .1),
+            'DOWN_IRRADIANCE490': (0, .1),
+            'DOXY': (250,300),
+            'NITRATE': (-2, 20),
+            'PH_IN_SITU_TOTAL': (6, 8.5),
+           }
+
+--- Cell 32 ---
+# We''l make use of the argopy color scheme:
+ArgoColors('qc')
+
+--- Cell 33 ---
+### Plot some data QC
+
+--- Cell 34 ---
+fig, ax = scatter_plot(ds, a_param + '_QC', this_x = a_param, 
+                       vmin=0, vmax=9, cmap=ArgoColors('qc').cmap, figsize=(5,5))
+ax.set_title("QC for %s [%s]\n'%s' mission" % (param_info['prefLabel'], a_param, f.mission), 
+             fontdict={'weight': 'bold', 'size': 14});
+
+--- Cell 35 ---
+fig, ax = scatter_plot(ds, a_param + '_ADJUSTED_QC', this_x = a_param + '_ADJUSTED', 
+                       vmin=0, vmax=9, cmap=ArgoColors('qc').cmap, figsize=(5,5))
+ax.set_title("QC for Adjusted %s [%s]\n'%s' mission" % (param_info['prefLabel'], a_param + '_ADJUSTED', f.mission), 
+             fontdict={'weight': 'bold', 'size': 14});
+
+--- Cell 36 ---
+### Plot some variable against another
+
+--- Cell 37 ---
+fig, ax = scatter_plot(ds, 'CHLA_ADJUSTED', this_x = 'TEMP_ADJUSTED', this_y = 'DOXY_ADJUSTED', figsize=(5,5))
+
+--- Cell 38 ---
+### Plot time series
+
+--- Cell 39 ---
+fig, ax = scatter_plot(ds, 'TEMP', vmin=2, vmax=8)
+ax.set_title("%s ('%s' mission)" % ('TEMP', f.mission), fontdict={'weight': 'bold', 'size': 14});
+
+--- Cell 40 ---
+fig, ax = scatter_plot(ds, 'PSAL', cmap=cmocean.cm.haline, vmin=34.5, vmax=35)
+ax.set_title("%s ('%s' mission)" % ('PSAL', f.mission), fontdict={'weight': 'bold', 'size': 14});
+
+--- Cell 41 ---
+# Plot all BGC params
+for param in bgc_params:
+    vmin, vmax = c_bounds[param] if param in c_bounds else (None, None)    
+    fig, ax = scatter_plot(ds, param, vmin=vmin, vmax=vmax)
+    ax.set_title("%s ('%s' mission)" % (param, f.mission), fontdict={'weight': 'bold', 'size': 12});
+

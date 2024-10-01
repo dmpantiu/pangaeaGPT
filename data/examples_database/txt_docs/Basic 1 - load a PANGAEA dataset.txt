@@ -1,0 +1,23 @@
+--- Cell 1 ---
+Basic 1 - load a PANGAEA dataset.ipynb
+
+--- Cell 2 ---
+#Basic pangaeapy example: how to load a PANGAEA dataset
+#First we need to import the PanDataSet class from the pangaeapy module:
+from pangaeapy import PanDataSet
+
+
+--- Cell 3 ---
+#Then we create an PANGAEA dataset object. To initialize the object we need to use either a integer ID or an DOI of the dataset we want to use within the constructor.
+ds=PanDataSet(896621)
+
+--- Cell 4 ---
+#A simple test would be to print the title of the database:
+ds.title
+
+--- Cell 5 ---
+ds.citation
+
+--- Cell 6 ---
+
+

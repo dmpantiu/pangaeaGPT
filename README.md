@@ -52,7 +52,7 @@ This project is a Streamlit-based application for exploring scientific datasets 
 1. **Start the Streamlit application**:
 
     ```sh
-    streamlit run main.py
+    streamlit run app.py
     ```
 
 2. **Use the app**:

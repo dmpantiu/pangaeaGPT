@@ -16,10 +16,22 @@ __pycache__/
 # Ignore PyCharm project files
 .idea/
 
-# Ignore temporary data directories
-current_data/
-plotting_data/
-plotting_tools/temp_files/
+# Ignore specific data directories
+data/plotting_data/
+data/publication_database/
+
+# Ignore logs
+logs/
 
 # Ignore Streamlit configuration files
 .streamlit/
+
+# Ignore specific files
+save.py
+files.py
+project_structure.txt
+project_files_structure.txt
+transit.json
+
+# Ignore temporary files
+tmp/figs/

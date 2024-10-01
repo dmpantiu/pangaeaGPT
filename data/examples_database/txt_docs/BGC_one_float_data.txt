@@ -1,0 +1,284 @@
+--- Cell 1 ---
+BGC_one_float_data.ipynb
+
+--- Cell 2 ---
+<img src="https://raw.githubusercontent.com/euroargodev/argopy/master/docs/_static/argopy_logo_long.png" alt="argopy logo" width="200"/> 
+
+# Download and visualise one BGC float data
+
+This notebook shows how to:
+- download and search the BGC-Argo index
+- download info from Argo NVS Reference Tables about a parameter
+- download BGC-Argo data for one float
+- plot a map with float trajectory
+- plot float data
+- bin or interpolate data
+
+--- Cell 3 ---
+## Import and set-up
+
+--- Cell 4 ---
+from argopy import DataFetcher  # This is the class to work with Argo data
+from argopy import ArgoIndex  #  This is the class to work with Argo index
+from argopy import ArgoNVSReferenceTables  # This is the class to retrieve data from Argo reference tables
+from argopy import ArgoColors  # This is a class with usefull pre-defined colors
+from argopy.plot import scatter_map, scatter_plot  # Functions to easily make maps and plots
+
+# Make a fresh start
+import argopy
+argopy.set_options(cachedir='cache_bgc')
+argopy.reset_options()
+argopy.clear_cache()
+
+#
+import numpy as np
+import matplotlib as mpl
+from matplotlib import pyplot as plt
+import cmocean
+import xarray as xr
+xr.set_options(display_expand_attrs = False)
+
+--- Cell 5 ---
+## Find a float to work with
+
+For this demo notebook, we'll randomly select a BGC float to work with.
+
+For your own use, you can simply overwrite the ``WMO`` variable content with your favorite float.
+
+Eg: 6901773 is a good float for plots, a lot of profiles and parameters...
+
+--- Cell 6 ---
+# Load the BGC-synthetic profiles index
+# rq: we work with synthetic profiles because that's the only dataset available from the erddap at this point (2023/07/21)
+idx = ArgoIndex(index_file='bgc-s').load()  
+idx
+
+--- Cell 7 ---
+# Select one random WMO:
+WMO_list = idx.read_wmo(index=True)
+WMO = WMO_list[np.random.randint(len(WMO_list))]
+
+# Or impose your float:
+WMO = 6901773
+
+print('We will work with float: %i' % WMO)
+
+--- Cell 8 ---
+## Get more info about this float using the ArgoIndex
+
+--- Cell 9 ---
+# Search for all profiles from this float:
+idx.search_wmo(WMO)
+
+--- Cell 10 ---
+# Get the list of parameters for this float:
+idx.read_params()
+
+--- Cell 11 ---
+# Get the list of BGC parameters:
+bgc_params = idx.read_params()
+[bgc_params.remove(p) for p in ['PRES', 'TEMP', 'PSAL']]  # Remove core variables from the list
+bgc_params
+
+--- Cell 12 ---
+## Get more info about a variable using the Argo Reference Tables
+
+--- Cell 13 ---
+# Randomly select a BGC variable for demo:
+a_param = bgc_params[np.random.randint(len(bgc_params))]
+
+# Then get more data from the reference table:
+reftbl = ArgoNVSReferenceTables().tbl('R03')
+param_info = reftbl[reftbl['altLabel']==a_param].iloc[0].to_dict()
+param_info
+
+--- Cell 14 ---
+## Load all possible data from this float
+
+**Note**: argopy is not yet able to chunk requests along cycles for parallel fetching of a single float. So, if the selected float has a lot of profiles, we limit the nb of download. Chunking large request is available for a region or a collection of floats, not profiles
+
+
+--- Cell 15 ---
+%%time
+if idx.N_MATCH < 200:
+    f = DataFetcher(ds='bgc', mode='expert', params='all').float(WMO).load()
+else:    
+    print("This float has a large number of profiles (%i) and it could be tuff for the erddap server "\
+          "to retrieve so much data, so we limit download to 200 profiles (this limitation will be suppress in a future release)" % idx.N_MATCH)
+    argopy.set_options(api_timeout=120)
+    f = DataFetcher(ds='bgc', mode='expert', params='all').profile(WMO, np.arange(0, 200)).load()
+f
+
+--- Cell 16 ---
+# Check the data structure (xarray.dataset):
+ds = f.data
+ds
+
+--- Cell 17 ---
+# Check the data through the argo xarray accessor:
+ds.argo
+
+--- Cell 18 ---
+# and check the corresponding index structure (pandas.dataframe):
+df = f.index
+df
+
+--- Cell 19 ---
+## Plot 
+
+--- Cell 20 ---
+### Utilities
+
+We will be using the argopy scatter_plot method that has the following signature:
+
+```
+scatter_plot(
+    ds: xarray.core.dataset.Dataset,
+    this_param,
+    this_x='TIME',
+    this_y='PRES',
+    figsize=(18, 6),
+    cmap=None,
+    vmin=None,
+    vmax=None,
+    s=4,
+)
+```
+
+--- Cell 21 ---
+# Define usefull functions
+
+# Try to define readible color bounds for each BGC variables 
+# (this is probably NOT appropriate for all floats !)
+c_bounds = {'BBP700': (20e-5, 70e-5),
+            'CDOM': (0, 2.5),
+            'CHLA': (0, 0.2),
+            'DOWNWELLING_PAR': (0, 600),
+            'DOWN_IRRADIANCE380': (0, 1),
+            'DOWN_IRRADIANCE412': (0, 1),
+            'DOWN_IRRADIANCE490': (0, 1),
+            'DOXY': (150,250),
+            'NITRATE': (-2, 20),
+           }
+
+
+--- Cell 22 ---
+# We'll make use of the argopy color scheme:
+ArgoColors('qc')
+
+--- Cell 23 ---
+### Plot some data QC
+
+--- Cell 24 ---
+fig, ax = scatter_plot(ds, a_param + '_QC', this_x = a_param, 
+                       vmin=0, vmax=9, cmap=ArgoColors('qc').cmap, figsize=(5,5))
+ax.set_title("QC for %s [%s]\nfrom Float %i ('%s' mission)" % (param_info['prefLabel'], a_param, WMO, f.mission), 
+             fontdict={'weight': 'bold', 'size': 14});
+
+--- Cell 25 ---
+fig, ax = scatter_plot(ds, a_param + '_ADJUSTED_QC', this_x = a_param + '_ADJUSTED', 
+                       vmin=0, vmax=9, cmap=ArgoColors('qc').cmap, figsize=(5,5))
+
+ax.set_title("QC for adjusted %s [%s]\nfrom Float %i ('%s' mission)" % (param_info['prefLabel'], a_param + '_ADJUSTED', WMO, f.mission), 
+             fontdict={'weight': 'bold', 'size': 14});
+
+--- Cell 26 ---
+### Plot some variable against another
+
+--- Cell 27 ---
+vmin, vmax = c_bounds[a_param] if a_param in c_bounds else (None, None)
+
+fig, ax = scatter_plot(ds, a_param + '_ADJUSTED', this_x = 'PSAL_ADJUSTED', this_y = 'TEMP_ADJUSTED', 
+                       vmin=vmin, vmax=vmax,
+                       figsize=(5,5), bgcolor='w')
+
+ax.set_title("%s=f(PSAL, TEMP) for Float %i ('%s' mission)" % (a_param, WMO, f.mission), 
+             fontdict={'weight': 'bold', 'size': 14});
+
+--- Cell 28 ---
+### Plot time series data
+
+--- Cell 29 ---
+fig, ax = scatter_plot(ds, 'TEMP')
+ax.set_title("%s from Float %i ('%s' mission)" % ('TEMP', WMO, f.mission), fontdict={'weight': 'bold', 'size': 14});
+
+--- Cell 30 ---
+fig, ax = scatter_plot(ds, 'TEMP', this_x='CYCLE_NUMBER')
+ax.set_title("%s from Float %i ('%s' mission)" % ('TEMP', WMO, f.mission), fontdict={'weight': 'bold', 'size': 14});
+
+--- Cell 31 ---
+fig, ax = scatter_plot(ds, 'PSAL', cmap=cmocean.cm.haline, vmin=38.75, vmax=39.5)
+ax.set_title("%s from Float %i ('%s' mission)" % ('PSAL', WMO, f.mission), fontdict={'weight': 'bold', 'size': 14});
+
+--- Cell 32 ---
+# Plot them all
+for param in bgc_params:
+    try:
+        vmin, vmax = c_bounds[param] if param in c_bounds else (None, None)
+        
+        fig, ax = scatter_plot(ds, param, vmin=vmin, vmax=vmax)
+        ax.set_title("%s from Float %i ('%s' mission)" % (param, WMO, f.mission), fontdict={'weight': 'bold', 'size': 12});
+    except:
+        print(f'Failed for {param}')
+
+--- Cell 33 ---
+### Plot binned data
+
+Sample dots in regular scatter plots often overlap and it may be hard to get a good sense of the data.
+
+One way to overcome this is to reduce data by pressure bins.
+
+This is a nice method that does not require interpolation.
+
+--- Cell 34 ---
+# Bins data by reducing to the median value in each pressure bins:
+bins = np.arange(0.0, np.max(ds["PRES"]), 10.0)
+ds_binned = ds.argo.groupby_pressure_bins(bins=bins, select='middle')
+ds_binned
+
+--- Cell 35 ---
+# Plot them all
+for param in bgc_params:
+    try:
+        vmin, vmax = c_bounds[param] if param in c_bounds else (None, None)
+        
+        fig, ax = scatter_plot(ds_binned, param, vmin=vmin, vmax=vmax)
+        ax.set_title("%s from Float %i ('%s' mission)\nSamples binned in pressure" % (param, WMO, f.mission), 
+                    fontdict={'weight': 'bold', 'size': 12});
+    except:
+        print(f'Failed for {param}')
+
+--- Cell 36 ---
+### Plot interpolated data
+
+--- Cell 37 ---
+dsp = ds.argo.point2profile()
+# std_lev = np.arange(0, np.round(ds['PRES'].max())-200, 25.0)
+std_lev = np.arange(0., 1000., 10.0)
+dsi = dsp.argo.interp_std_levels(std_lev)
+dsi
+
+--- Cell 38 ---
+# Plot them all
+for param in bgc_params:
+# for param in ['CDOM']:
+    try:
+        vmin, vmax = c_bounds[param] if param in c_bounds else (None, None)
+        
+        fig, ax = scatter_plot(dsi, param, 
+                                this_y='PRES_INTERPOLATED',
+                                vmin=vmin, vmax=vmax)
+        ax.set_title("%s from Float %i ('%s' mission)\nSamples interpolated in pressure" % (param, WMO, f.mission), 
+                    fontdict={'weight': 'bold', 'size': 12});
+    except:
+        print(f'Failed for {param}')
+
+--- Cell 39 ---
+## Float BGC dashboard
+
+--- Cell 40 ---
+f.dashboard()
+
+--- Cell 41 ---
+
+

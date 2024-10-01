@@ -1,10 +1,23 @@
 import os
 import requests
 import zipfile
-from tqdm import tqdm
+try:
+    from tqdm import tqdm
+except ImportError:
+    print("Warning: tqdm not found. Using a simple progress indicator.")
+    def tqdm(iterable, *args, **kwargs):
+        return iterable  # Simple fallback that just returns the iterable
+
+
+#import os
+openai_api_key = os.environ.get('OPENAI_API_KEY') or input("Please enter your OpenAI API key: ")
+langchain_api_key = os.environ.get('LANGCHAIN_API_KEY') or input("Please enter your LangChain API key (optional): ")
+langchain_project_name = os.environ.get('LANGCHAIN_PROJECT_NAME') or input("Please enter your LangChain project name (optional): ")
+
+
 
 # Define directories and URLs for the shapefiles and bathymetry
-base_dir = os.path.join(os.getcwd(), 'plotting_data')
+base_dir = os.path.join(os.getcwd(), 'data', 'plotting_data')
 shape_files_dir = os.path.join(base_dir, 'shape_files')
 bathymetry_dir = os.path.join(base_dir, 'bathymetry', 'etopo')
 
@@ -68,13 +81,13 @@ download_and_extract(etopo_bathymetry_url, bathymetry_dir, extract_to_subfolder=
 print("All required shapefiles and bathymetry data downloaded, extracted, and zip files removed successfully.")
 
 # Prompt user for API keys and project name
-openai_api_key = input("Please enter your OpenAI API key (required): ").strip()
-langchain_api_key = input("Please enter your LangChain API key (optional): ").strip()
-langchain_project_name = input("Please enter your LangChain project name (optional): ").strip()
+#openai_api_key = input("Please enter your OpenAI API key (required): ").strip()
+#langchain_api_key = input("Please enter your LangChain API key (optional): ").strip()
+#langchain_project_name = input("Please enter your LangChain project name (optional): ").strip()
 
 # Sanitize inputs to remove any invalid characters
 def sanitize_input(input_str):
-    return ''.join(c for c in input_str if ord(c) < 128)
+    return ''.join(c for c in str(input_str) if ord(c) < 128) if input_str else ""
 
 openai_api_key = sanitize_input(openai_api_key)
 langchain_api_key = sanitize_input(langchain_api_key)
@@ -87,7 +100,8 @@ secrets_path = os.path.join(secrets_dir, 'secrets.toml')
 
 with open(secrets_path, 'w') as f:
     f.write("[general]\n")
-    f.write(f"openai_api_key = \"{openai_api_key}\"\n")
+    if openai_api_key:
+        f.write(f"openai_api_key = \"{openai_api_key}\"\n")
     if langchain_api_key:
         f.write(f"langchain_api_key = \"{langchain_api_key}\"\n")
     if langchain_project_name:

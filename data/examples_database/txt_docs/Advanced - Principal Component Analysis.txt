@@ -1,0 +1,180 @@
+--- Cell 1 ---
+Advanced - Principal Component Analysis.ipynb
+
+--- Cell 2 ---
+#Advanced pangaeapy usage: Principal Component Analysis
+
+--- Cell 3 ---
+#This example tries to reproduce a PCA performed on geochemical XRF measurements published by Burdanowitz et al (2019: https://doi.org/10.1016/j.dsr2.2019.03.003).
+
+--- Cell 4 ---
+#As ususal we have to include the necessary modules first. For this example we use the PCA module from sklearn.
+
+#Since the data is distributed over four PANGAEA datasets we need to merge, we also need to define here a helper function which deletes duplicate columns added after merging of data frames.
+
+--- Cell 5 ---
+from pangaeapy import PanDataSet
+import pandas as pd
+from matplotlib import pyplot as plt
+from sklearn.decomposition import PCA as sklearnPCA
+from sklearn.preprocessing import StandardScaler
+
+#a helper function to delete duplicate columns which are added by the pd.merge actions
+def drop_y(df):
+    # list comprehension of the cols that end with '_y'
+    to_drop = [x for x in df if x.endswith('_y')]
+    df.drop(to_drop, axis=1, inplace=True)
+
+--- Cell 6 ---
+#Data loading and merging
+
+#Now we load the datasets from PANGAEA and merge them within one single dataframe .
+
+--- Cell 7 ---
+ds1 = PanDataSet(900972)
+ds2 = PanDataSet(900971)
+ds3 = PanDataSet(900967)
+ds4 = PanDataSet(900968)
+
+#just for convenience, since data is organised in two ways we merge it in two steps
+dsC=pd.merge(ds2.data,ds3.data,left_on='Depth sed',right_on='Depth sed',suffixes=('', '_y'))
+drop_y(dsC)
+dsN=pd.merge(ds1.data,ds4.data,left_on='Depth sed',right_on='Depth sed',suffixes=('', '_y'))
+drop_y(dsN)
+#now we concat the frames and drop the index
+dsdata=pd.concat([dsN,dsC])
+dsdata = dsdata.reset_index(drop=True)
+
+--- Cell 8 ---
+dsdata.columns
+
+--- Cell 9 ---
+#Data cleaning
+
+#Unfortunately, the dataset has data expressed in % as well as in mg/kg, we therefore need to clean the data first in order to have the same units here.
+# We recalculate % to mg/kg with a factor of 10000.
+
+#Further, some values are given as oxides (e.g. SiO2) and some as elements, so we need to convert the oxide weights to elements weights using the oxide factor dict
+
+--- Cell 10 ---
+# 1) the dataset has data expressed in % as well as in mg/kg, we therefore need to clean the data first
+#    in order to have the same units here. We recalculate % to mg/kg with a factor of 10000
+# 2) oxides need to be converted to elementt weights
+oxide={'SiO2':2.1392, 'TiO2':1.6681, 'Al2O3':1.8895, 'Fe2O3':1.4297, 'MnO':1.2912, 'MgO':1.6582, 'CaO':1.3992,
+       'Na2O':1.3480, 'K2O':1.2046, 'P2O5':2.2916, 'SO3':2.4972}
+for pshort,param in ds1.params.items():
+    if pshort in oxide:
+        dsdata[pshort]=dsdata[pshort].divide(oxide[pshort])
+    if param.unit=='mg/kg':
+        dsdata[pshort]=dsdata[pshort].divide(10000)
+
+--- Cell 11 ---
+#Lets take a look at the resulting data matrix
+
+dsdata.tail()
+
+--- Cell 12 ---
+#PCA
+
+# OK, lets try to perform a PCA on the data. of course we only use the chemical columns, therefore we have slice the dataframe by columns.
+#  For this purpose we define a list called elementcols, which contains the columns we need.
+
+--- Cell 13 ---
+elementcols=['SiO2', 'TiO2', 'Al2O3', 'Fe2O3', 'MnO', 'MgO', 'CaO',
+             'Na2O', 'K2O', 'P2O5', 'SO3','Ba', 'Co', 'Cr', 'Cu', 
+             'Ga', 'Nb', 'Ni', 'Rb', 'Sr', 'Th', 'V', 'Y', 'Zn', 'Zr','TOC','Cl']
+
+X=dsdata[elementcols].values
+y = dsdata['Age'].values
+
+--- Cell 14 ---
+#But before we continue we have to standardise the data instead using the absolute values. 
+# For this purpose we use the StandardScaler and run its fit method on X. The result is stored in X_std
+
+scaledX=StandardScaler().fit(X)
+X_std = scaledX.transform(X)
+
+--- Cell 15 ---
+#Now we can start the analysis. To perform the PCA, we need to defind the number of components (n_components=2), as well as the data we use for the fit (X).
+
+#The individual eigenvectors (loadings) of the principal components are stored in the 'sklearn_pca.components_' variable which is a two dim array.
+
+#We put this array into a dataframe (pcaload) for convenience and later plotting. Before we have to transpose the array..
+
+#Further we need to clean the column names to strip the oxide endings (SiO2 -> Si)
+
+sklearn_pca = sklearnPCA(n_components=2)
+pcaresult = sklearn_pca.fit(X_std).transform(X_std)
+
+pcaload=pd.DataFrame(sklearn_pca.components_).transpose()
+pcaload=pcaload.rename(columns={0:'PC1',1:'PC2'})
+pcaload['Element']=elementcols
+pcaload['Element']=pcaload['Element'].str.extract(r'([A-Z][a-z]?)')
+pcaload.head()
+
+--- Cell 16 ---
+#Now lets try to plot this to reproduce the figure of the original publication.
+
+fig = plt.figure(figsize = (6,5))
+plt.plot(pcaload['PC1'],pcaload['PC2'], '.',color='k', label=pcaload['Element'],markersize=1)
+for i, p in pcaload.iterrows():
+        plt.text(p['PC1'], p['PC2'], str(p['Element']),fontsize=10)
+
+--- Cell 17 ---
+#Fail and retry
+
+#Unfortunately this approach completely failed to reproduce the figure.
+
+#It seems as if some expert knowledge is needed to fully reproduce the results. 
+# At this point we need to take a closer look at the methodology the authors of the publication used. A vague hint is given in chapter 2.1 where they state:
+
+#'..Samples for the measurement of total organic carbon (TOC) were treated with 1 M hydrochloric acid (HCl) prior to instrumental analysis'
+
+#So maybe the Cl values have not been included in the analysis to avoid bias caused by sample treatment. So let's see what happens when we exclude Cl values from our analysis :
+
+--- Cell 18 ---
+elementcols.remove('Cl')
+
+--- Cell 19 ---
+#and we perform the analyis again:
+X=dsdata[elementcols].values
+y = dsdata['Age'].values
+
+--- Cell 20 ---
+scaledX=StandardScaler().fit(X)
+X_std = scaledX.transform(X)
+sklearn_pca = sklearnPCA(n_components=2)
+pcares = sklearn_pca.fit(X_std).transform(X_std)
+#we can add the loadings to the original
+pcaresf=pd.DataFrame(pcares)
+dsdata['PCA1']=pcaresf[0]
+dsdata['PCA2']=pcaresf[1]
+pcaload=pd.DataFrame(sklearn_pca.components_).transpose()
+pcaload=pcaload.rename(columns={0:'PC1',1:'PC2'})
+pcaload['Element']=elementcols
+pcaload['Element']=pcaload['Element'].str.extract(r'([A-Z][a-z]?)')
+pcaload.head()
+
+--- Cell 21 ---
+#Success
+
+#And voila we can more or less reproduce the figure given in Burdanowitz paper.
+
+#I know: the eigenvalues look different, maybe this is caused by our standadisation approach.
+
+#But for now I am quite happy with the result. ;)
+
+fig = plt.figure(figsize = (6,5))
+plt.plot(pcaload['PC1'],pcaload['PC2'], '.',color='k', label=pcaload['Element'],markersize=1)
+for i, p in pcaload.iterrows():
+        plt.text(p['PC1'], p['PC2'], str(p['Element']),fontsize=10)
+
+--- Cell 22 ---
+#As an extra we can try to plot the eigenvalues according to their ages. And it seems as if there are some distinct age related clusters..
+
+fig = plt.figure(figsize = (6,5))
+plt.scatter(dsdata['PCA1'],dsdata['PCA2'], c=dsdata['Age'])
+plt.xlabel('PCA1')
+plt.ylabel('PCA2')
+plt.show()
+

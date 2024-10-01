@@ -1,0 +1,66 @@
+--- Cell 1 ---
+example.ipynb
+
+--- Cell 2 ---
+from pangaeapy.pandataset import PanDataSet
+import matplotlib.pyplot as plt
+
+--- Cell 3 ---
+ds = PanDataSet('10.1594/PANGAEA.734969')
+ds.title
+
+--- Cell 4 ---
+ds.data.columns
+
+--- Cell 5 ---
+#Some statistics for the Temp variable
+ds.data['Temp'].describe()
+
+--- Cell 6 ---
+#Check the topotype (eg. if it is series of vertical profile, tinme series etc..)
+ds.topotype
+
+--- Cell 7 ---
+#Its a series so lets take a look how many PANGAEA 'events' (= series identifier) this data set has...
+for ev in ds.events:
+    print(ev.label)
+
+--- Cell 8 ---
+#We set an index on the 'Event' column to be able to use the Event name as a selector later on..
+ds.data.set_index('Event',inplace=True)
+
+--- Cell 9 ---
+#Now we pick one of the events to plot a salinity profile
+ds.data.loc['PS04/223-1'].plot(x='Sal', y=['Depth water'],style='.-',label=['Salinity'])
+# Reverse the y-axis, so surface above
+plt.gca().invert_yaxis()
+# Show the plot
+plt.show()
+
+--- Cell 10 ---
+#another example - temperature, salinity profile 
+ds.data.loc['PS04/223-1'].plot(x='Depth water', y=['Temp','Sal'],style='-', secondary_y='Sal')
+
+--- Cell 11 ---
+#let's make it a little bit better
+ds1 = ds.data.loc['PS04/223-1']
+# Create the plot
+fig, ax1 = plt.subplots()
+
+# Plot on the first x-axis
+ax1.plot(ds1['Temp'],ds1['Depth water'], 'r-', label='Temp')
+ax1.set_xlabel('Temp')
+ax1.set_ylabel('Depth')
+ax1.invert_yaxis()  # Invert the y-axis
+
+# Create a second x-axis sharing the same y-axis
+ax2 = ax1.twiny()
+
+# Plot on the second x-axis
+ax2.plot(ds1['Sal'],ds1['Depth water'], 'b-', label='Salinity')
+ax2.set_xlabel('Salinity')
+
+# Show the plot with both x-axes and reversed y-axis
+plt.show()
+
+

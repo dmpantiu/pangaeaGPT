@@ -1,0 +1,47 @@
+--- Cell 1 ---
+adcp.ipynb
+
+--- Cell 2 ---
+from pangaeapy.pandataset import PanDataSet
+import pandas as pd
+import matplotlib.pyplot as plt
+ds = PanDataSet('10.1594/PANGAEA.864110')
+
+--- Cell 3 ---
+ds.title
+
+--- Cell 4 ---
+ds.data.head()
+
+--- Cell 5 ---
+ds.data.columns
+
+--- Cell 6 ---
+ds.data['Depth water'].unique()
+
+--- Cell 7 ---
+# Convert 'Date/Time' to datetime format
+ds.data['Date/Time'] = pd.to_datetime(ds.data['Date/Time'])
+
+# Set 'Date/Time' as the index and sort it
+ds.data.set_index('Date/Time', inplace=True)
+ds.data.sort_index(inplace=True)
+
+
+--- Cell 8 ---
+mf= pd.pivot_table(ds.data.loc['2012-04-01':'2012-06-20'], index='Depth water', columns='Date/Time', values='Cur vel V',fill_value=0)
+mf.head()
+
+--- Cell 9 ---
+import seaborn as sns
+import numpy as np
+import matplotlib.ticker as ticker
+import matplotlib.dates as mdates
+fig=plt.figure(figsize=(18,4))
+ax=sns.heatmap(mf, square=False,cmap="jet")
+#ax.xaxis.set_major_locator(ticker.LinearLocator(numticks=6))
+plt.show()
+
+--- Cell 10 ---
+ds.citation
+

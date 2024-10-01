@@ -1,0 +1,24 @@
+--- Cell 1 ---
+Basic 3 - plotting with pandas.ipynb
+
+--- Cell 2 ---
+#Basic pangaeapy example: plotting with pandas
+from pangaeapy import PanDataSet
+
+--- Cell 3 ---
+ds=PanDataSet(900968)
+
+--- Cell 4 ---
+#Before we start we need to now how the columns are named, pangaeapy uses the short names of a given parameter to label each column.
+ds.data.columns
+
+--- Cell 5 ---
+#Now plotting is easy using the standard pandas plot method:
+ds.data.plot(x='Age', y='CaCO3')
+
+--- Cell 6 ---
+ds.citation
+
+--- Cell 7 ---
+
+
