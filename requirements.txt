@@ -15,6 +15,7 @@ requests==2.32.3
 beautifulsoup4==4.12.3
 pangaeapy==1.0.19
 tqdm==4.66.5
+tabulate
 xarray==2024.9.0
 gsw==3.6.19
 adjustText==1.2.0
