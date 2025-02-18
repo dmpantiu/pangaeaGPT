@@ -63,38 +63,54 @@ class CustomPythonREPLTool(PythonREPLTool):
     _datasets: dict = PrivateAttr()
 
     def __init__(self, datasets, **kwargs):
+        """
+        Custom Python REPL tool that injects dataset variables and logs plot generation.
+        :param datasets: Dictionary { "dataset_1": <DataFrame>, "dataset_2": <DataFrame>, ... }
+        """
         super().__init__(**kwargs)
         self._datasets = datasets
 
     def _run(self, query: str, **kwargs) -> Any:
-        # Initialize the local context with necessary libraries
+        """
+        Execute the user-provided Python code in a local context containing:
+          - st (Streamlit)
+          - plt (Matplotlib Pyplot)
+          - pd (Pandas)
+          - All loaded dataset variables (self._datasets)
+          - A dynamically generated plot_path
+
+        If a figure is saved to plot_path, a "plot_generated" event will be logged in session_state["execution_history"].
+        """
+        import streamlit as st
+        import matplotlib.pyplot as plt
+        import pandas as pd
+        import logging
+        from io import StringIO
+        from src.utils import log_history_event, generate_unique_image_path
+
+        # Prepare local context with necessary packages
         local_context = {"st": st, "plt": plt, "pd": pd}
 
-        # Inject all datasets into the local context with their variable names
+        # Inject the user’s datasets under the specified variable names (e.g. dataset_1, dataset_2, etc.)
         local_context.update(self._datasets)
 
-        # Generate a unique plot path and add it to the context
+        # Generate a unique file path for the plot (plot_path)
         plot_path = generate_unique_image_path()
         local_context['plot_path'] = plot_path
 
+        # Redirect stdout so we can capture any output from exec(...)
+        old_stdout = sys.stdout
+        redirected_output = StringIO()
+        sys.stdout = redirected_output
+
         try:
-            # Redirect stdout to capture prints
-            old_stdout = sys.stdout
-            redirected_output = sys.stdout = StringIO()
-
-            # Execute the user-provided query in the local context
+            # Execute user code
             exec(query, local_context)
-
-            # Capture the output
             output = redirected_output.getvalue()
-
-            # Optionally, capture the value of the last expression if needed
 
         except ModuleNotFoundError as e:
             missing_module = e.name
             logging.warning(f"Module '{missing_module}' not found during code execution.")
-
-            # Return a structured message indicating the missing package
             return {
                 "error": "ModuleNotFoundError",
                 "missing_module": missing_module,
@@ -107,9 +123,10 @@ class CustomPythonREPLTool(PythonREPLTool):
                 "message": str(e)
             }
         finally:
-            # Reset stdout
+            # Restore stdout
             sys.stdout = old_stdout
 
+        # Check if a plot was actually saved to plot_path
         plot_generated = False
         if os.path.exists(plot_path):
             st.session_state.saved_plot_path = plot_path
@@ -121,11 +138,25 @@ class CustomPythonREPLTool(PythonREPLTool):
             status_message = f"Plot generated = True. Saved at: {plot_path}"
             logging.info(status_message)
             st.session_state.plot_generated_status = status_message
+            
+            from src.utils import log_history_event
+            log_history_event(
+                st.session_state,
+                "plot_generated",
+                {
+                    "plot_path": plot_path.replace("sandbox:", ""),  # Remove sandbox prefix
+                    "agent": "VisualizationAgent",
+                    "description": "Python_REPL Generated Plot",
+                    "content": query  # Store the actual code used
+                }
+            )
 
         return {
             "result": f"Execution completed. Plot saved at: {plot_path if plot_generated else 'No plot generated'}",
-            "output": output
+            "output": output,
+            "plot_images": [plot_path] if plot_generated else []
         }
+
 
 
 def search_pg_datasets_tool(query):
@@ -137,24 +168,45 @@ def search_pg_datasets_tool(query):
 
     if not datasets_info.empty:
         st.session_state.datasets_info = datasets_info
-        st.session_state.messages_search.append({"role": "assistant", "content": f"**Search query:** {query}"})
-        st.session_state.messages_search.append(
-            {"role": "assistant", "content": "**Datasets Information:**", "table": datasets_info.to_json()}
-        )
+        st.session_state.messages_search.append({
+            "role": "assistant", 
+            "content": f"**Search query:** {query}"
+        })
+        # Pass the table as JSON (you can use orient="split" or the default, as long as your UI can parse it)
+        st.session_state.messages_search.append({
+            "role": "assistant", 
+            "content": "**Datasets Information:**", 
+            "table": datasets_info.to_json(orient="split")
+        })
 
-        datasets_description = "\n"
+        # Optionally, build a detailed description string for the prompt:
+        datasets_description = ""
         for i, row in datasets_info.iterrows():
-            datasets_description += f"Dataset {i + 1}:\nName: {row['Name']}\nDescription: {row['Short Description']}\nParameters: {row['Parameters']}\n\n"
+            datasets_description += (
+                f"Dataset {i + 1}:\n"
+                f"Name: {row['Name']}\n"
+                f"Description: {row['Short Description']}\n"
+                f"Parameters: {row['Parameters']}\n\n"
+            )
 
-        prompt_search = Prompts.generate_system_prompt_search(query, datasets_info)
-        # st.session_state.messages_search.append({"role": "assistant", "content": prompt})
+        prompt_search = (
+            f"The user has provided the following query: {query}\n"
+            f"Available datasets:\n{datasets_description}\n"
+            "Please identify the top two datasets that best match the user's query and explain why they are the most relevant. "
+            "Do not suggest datasets without values in the Parameters field, because they cannot be directly downloaded.\n"
+            "Respond using the following schema:\n"
+            "{dataset name}\n{reason why relevant}\n{propose some short analysis and further questions to answer}"
+        )
 
     return datasets_info, prompt_search
 
+
 def create_search_agent(datasets_info=None):
-    model_name = st.session_state.get("model_name", "gpt-3.5-turbo")  # Default to "gpt-3.5-turbo" if not set
-    api_key = API_KEY
-    llm = ChatOpenAI(api_key=api_key, model_name=model_name)
+    model_name = st.session_state.get("model_name", "gpt-3.5-turbo")
+    if model_name == "o3-mini":
+        llm = ChatOpenAI(api_key=API_KEY, model_name=model_name)
+    else:
+        llm = ChatOpenAI(api_key=API_KEY, model_name=model_name)
 
     # Generate dataset description string
     datasets_description = ""
@@ -169,7 +221,7 @@ def create_search_agent(datasets_info=None):
              #f"Here are some datasets returned from the search:\n{datasets_description}"
              "In addition to dataset searches, you have a secondary capability to answer questions about publications related to specific datasets (or in other words what was published based on this dataset). If a user explicitly asks about publications or research findings based on a particular dataset, you can use the answer_publication_questions tool. For example, you can handle queries like 'What was published based on this dataset?' or 'What were the main conclusions from the research using this dataset?'\n\n"
              "Remember:\n"
-             "1. Prioritize dataset searches using the search_pg_datasets tool.\n"
+             "1. Prioritize dataset searches using the search_pg_datasets tool. Make sure that the query you pass to the tool is rephrased so that elastic search gives the best match. Also try not to include words like 'search' and etc. in the search query.\n"
              "2. Only use the answer_publication_questions tool when the user specifically asks about publications or research findings related to a dataset they've already identified. Please make sure that you correctly pass the doi to the tool. It should be doi retrieved after the search (user will point out which dataset it interested in). DO NOT GENERATE DOI ON THIS STEP OUT OF YOUR MIND! JUST TAKE WHAT WAS GIVEN WITH SYSTEM PROMPT.\n"
              "3. If needed, ask the user to clarify which dataset they're referring to before using the publication tool.\n\n"
              "Strive to provide accurate, helpful, and concise responses to user queries."
@@ -227,10 +279,10 @@ class TSPlotToolArgs(BaseModel):
 
 # 3. Agent Creation Functions
 def create_pandas_agent(user_query, datasets_info):
-    llm = ChatOpenAI(
-        api_key=API_KEY,
-        model_name=st.session_state.model_name
-    )
+    if st.session_state.model_name == "o3-mini":
+        llm = ChatOpenAI(api_key=API_KEY, model_name=st.session_state.model_name)
+    else:
+        llm = ChatOpenAI(api_key=API_KEY, model_name=st.session_state.model_name)
 
     # Assign unique variable names to each dataframe and collect dataframes
     dataset_variables = []
@@ -343,6 +395,89 @@ reflect_tool = StructuredTool.from_function(
     args_schema=ReflectOnImageArgs
 )
 
+#Planning tool
+
+class PlanningToolArgs(BaseModel):
+    goal: str = Field(
+        description="A short statement of the user's main objective or question to create a plan for."
+    )
+    constraints: List[str] = Field(
+        default_factory=list,
+        description="Any constraints or conditions to be respected in the plan (e.g., time or resource constraints)."
+    )
+    user_query: str = Field(
+        default="",
+        description="The original user query or question that triggered the plan request."
+    )
+    datasets_summary: str = Field(
+        default="",
+        description="A concise summary of the current datasets or project context that the plan should consider."
+    )
+
+
+def planning_tool(
+    goal: str,
+    constraints: List[str],
+    user_query: str,
+    datasets_summary: str
+) -> dict:
+    """
+    A planning function that uses a ChatCompletion to create a step-by-step plan,
+    referencing the user query, constraints, and dataset info for context.
+    Returns a dict with at least "messages" so it updates the state in langgraph.
+    """
+
+    from langchain_openai import ChatOpenAI
+    from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
+
+    # Create a system prompt that instructs the LLM how to create the plan:
+    system_prompt = (
+        "You are an advanced 'PlanningTool' that must generate a step-by-step plan. "
+        "Consider the user’s ultimate goal, the constraints, the original query, and the dataset context. "
+        "Respond with a thorough but concise plan that can be used by the system to coordinate tasks."
+    )
+
+    # We'll build a user message that includes all relevant info:
+    # (goal, constraints, user_query, and the dataset summary).
+    user_message = (
+        f"Goal: {goal}\n\n"
+        f"Constraints: {constraints}\n\n"
+        f"User Query: {user_query}\n\n"
+        f"Dataset Info:\n{datasets_summary}\n\n"
+        "Please produce a plan with carefully enumerated steps."
+    )
+
+    # Create an LLM instance
+    model_name = st.session_state.get("model_name", "gpt-3.5-turbo")
+    if model_name == "o3-mini":
+        llm = ChatOpenAI(api_key=API_KEY, model_name=model_name)
+    else:
+        llm = ChatOpenAI(api_key=API_KEY, model_name=model_name)
+
+
+    # Construct messages for the chat
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=user_message)
+    ]
+
+    # Call the LLM
+    response = llm(messages)
+
+    # The text of the plan is in response.content
+    final_plan_text = response.content
+
+    # Return a dictionary that merges into state["messages"] 
+    # (this is how the graph update won't fail with InvalidUpdateError)
+    return {
+        "messages": [
+            AIMessage(content=final_plan_text, name="Planner")
+        ]
+    }
+
+
+
+
 def install_package(package_name: str, pip_options: str = ""):
     #ALLOWED_PACKAGES = {"matplotlib", "seaborn", "plotly", "pandas", "numpy", "gsw", "scipy"}
     #if package_name not in ALLOWED_PACKAGES:
@@ -419,6 +554,40 @@ example_visualization_tool = StructuredTool.from_function(
     args_schema=ExampleVisualizationArgs
 )
 
+########################################
+# 1) DEFINE THE TOOL FOR LISTING FILES #
+########################################
+
+class ListPlottingDataFilesArgs(BaseModel):
+    # No arguments needed here if it just lists everything
+    dummy: str = Field(default="", description="(No arguments needed)")  
+
+def list_plotting_data_files(dummy: str = "") -> str:
+    """
+    Lists all files and subdirectories under data/plotting_data.
+    Returns a single string containing each path on a new line.
+    """
+    base_dir = os.path.join("data", "plotting_data")
+    all_paths = []
+
+    for root, dirs, files in os.walk(base_dir):
+        # Optionally skip hidden dirs/files, etc.
+        for filename in files:
+            rel_path = os.path.relpath(os.path.join(root, filename), start=base_dir)
+            all_paths.append(rel_path)
+
+    if not all_paths:
+        return "No files found in data/plotting_data."
+
+    return "Files under data/plotting_data:\n" + "\n".join(all_paths)
+
+list_plotting_data_files_tool = StructuredTool.from_function(
+    func=list_plotting_data_files,
+    name="list_plotting_data_files",
+    description="Lists all files under data/plotting_data directory (including subfolders).",
+    args_schema=ListPlottingDataFilesArgs
+)
+
 
 
 def create_visualization_agent(user_query, datasets_info):
@@ -448,7 +617,8 @@ def create_visualization_agent(user_query, datasets_info):
         repl_tool,
         reflect_tool,
         install_package_tool,
-        example_visualization_tool
+        example_visualization_tool,
+        list_plotting_data_files_tool
     ]
     agent_visualization = create_openai_tools_agent(
         llm,
@@ -476,7 +646,10 @@ def create_visualization_agent(user_query, datasets_info):
 def create_hard_coded_visualization_agent(user_query, datasets_info):
     import streamlit as st
     model_name = st.session_state.get("model_name", "gpt-3.5-turbo")
-    llm = ChatOpenAI(api_key=API_KEY, model_name=model_name)
+    if model_name == "o3-mini":
+        llm = ChatOpenAI(api_key=API_KEY, model_name=model_name)
+    else:
+        llm = ChatOpenAI(api_key=API_KEY, model_name=model_name)
 
     # Prepare datasets
     datasets = {}
@@ -534,7 +707,10 @@ def create_hard_coded_visualization_agent(user_query, datasets_info):
 def create_oceanographer_agent(user_query, datasets_info):
     import streamlit as st
     model_name = st.session_state.get("model_name", "gpt-3.5-turbo")
-    llm = ChatOpenAI(api_key=API_KEY, model_name=model_name)
+    if model_name == "o3-mini":
+        llm = ChatOpenAI(api_key=API_KEY, model_name=model_name)
+    else:
+        llm = ChatOpenAI(api_key=API_KEY, model_name=model_name)
 
     # Prepare datasets
     datasets = {}
@@ -621,11 +797,9 @@ def agent_node(state, agent, name):
     import streamlit as st  # Ensure Streamlit is imported
     logging.debug(f"Entering agent_node for {name}")
 
-    # Ensure 'agent_scratchpad' exists in the state and is a list
     if 'agent_scratchpad' not in state or not isinstance(state['agent_scratchpad'], list):
         state['agent_scratchpad'] = []
 
-    # Update 'input' to be the latest user message
     user_messages = [msg for msg in state["messages"] if isinstance(msg, HumanMessage)]
     if user_messages:
         last_user_message = user_messages[-1].content
@@ -633,114 +807,156 @@ def agent_node(state, agent, name):
     else:
         state['input'] = state.get('input', '')
 
-    # Ensure 'plot_images' exists in the state and is a list
     if 'plot_images' not in state or not isinstance(state['plot_images'], list):
         state['plot_images'] = []
 
-    # Invoke the agent with the current state
+    # Invoke the agent
     result = agent.invoke(state)
     last_message_content = result.get("output", "")
     intermediate_steps = result.get("intermediate_steps", [])
+    returned_plot_images = result.get("plot_images", [])  # Gather newly returned images
 
-    # Store intermediate steps in session state
+    # Store intermediate steps
     if 'intermediate_steps' not in st.session_state:
         st.session_state['intermediate_steps'] = []
     st.session_state['intermediate_steps'].extend(intermediate_steps)
 
-    # Handle specific agent responses
+    from src.utils import log_history_event
+    for step in intermediate_steps:
+        action = step[0]
+        observation = step[1]
+        tool_name = action.tool
+        tool_input = action.tool_input
+        log_history_event(
+            st.session_state,
+            "tool_usage",
+            {
+                "agent_name": name,
+                "tool_name": tool_name,
+                "tool_input": tool_input,
+                "observation": observation
+            }
+        )
+
+    # If a ModuleNotFoundError was returned
     if name == "VisualizationAgent":
         if isinstance(last_message_content, dict):
             if last_message_content.get("error") == "ModuleNotFoundError":
                 missing_module = last_message_content.get("missing_module")
                 logging.info(f"Detected missing module: {missing_module}")
-
-                # Use the install_package_tool to install the missing module
                 install_result = install_package_tool.run({"package_name": missing_module})
                 logging.info(f"Install package result: {install_result}")
-
                 if "successfully" in install_result:
-                    # Retry the original code execution
-                    logging.info(f"Retrying code execution after installing '{missing_module}'.")
                     retry_result = agent.invoke(state)
                     last_message_content = retry_result.get("output", "")
                 else:
-                    # Installation failed; notify the user
-                    last_message_content = f"Failed to install the missing package '{missing_module}'. Please install it manually and try again."
+                    last_message_content = f"Failed to install the missing package '{missing_module}'. Please install it manually."
 
-        new_plot_path = st.session_state.get("new_plot_path")
-        if new_plot_path and isinstance(new_plot_path, tuple):
-            plot_path, code_path = new_plot_path
-            if os.path.exists(plot_path) and os.path.exists(code_path):
-                state["plot_images"].append(new_plot_path)
-                st.session_state.new_plot_path = None
-
-    # Check if a new plot was generated
+    # Check if a new plot path was set in session_state
     new_plot_path = st.session_state.get("new_plot_path")
     logging.info(f"New plot path from session state: {new_plot_path}")
-
     if new_plot_path:
-        logging.info(f"Checking if file exists: {new_plot_path}")
         if os.path.exists(new_plot_path):
-            logging.info(f"File exists: {new_plot_path}")
             state["plot_images"].append(new_plot_path)
-            logging.info(f"Added new plot to state: {new_plot_path}")
-            st.session_state.new_plot_path = None  # Reset the new plot path
-            logging.info("Reset new_plot_path in session state")
-        else:
-            logging.warning(f"File does not exist: {new_plot_path}")
+            st.session_state.new_plot_path = None
+            log_history_event(
+                st.session_state,
+                "plot_generated",  # Use consistent event type
+                {
+                    "plot_path": new_plot_path,
+                    "agent_name": name,
+                    "description": f"Plot generated by {name}"
+                }
+            )
+    if new_plot_path:
+        log_history_event(
+            st.session_state,
+            "plot_generated_final",
+            {"plot_path": new_plot_path}
+        )
+
+    # Combine the newly returned images with state images
+    all_plot_images = list(returned_plot_images) + state["plot_images"]
+
+    # Create a new AIMessage with additional info.
+    # Note: We add a "plot" field so that it appears in the final JSON.
+    ai_message = AIMessage(
+        content=last_message_content,
+        name=name,
+        additional_kwargs={
+            "plot_images": all_plot_images,
+            "plot": all_plot_images[0] if all_plot_images else None
+        }
+    )
+    state["messages"].append(ai_message)
+
+    # Trim messages if needed
+    state["messages"] = state["messages"][-7:]
 
     if name == "VisualizationAgent":
         state["visualization_agent_used"] = True
 
-    # Append the last message to the state's messages
-    state["messages"].append(AIMessage(content=last_message_content, name=name))
-
-    # Limit the messages to prevent duplication (optional, based on your needs)
-    state["messages"] = state["messages"][-7:]
-
-    # Update the last agent message
     state["last_agent_message"] = last_message_content
-
-    # Return the updated state
     return state
+
+
 
 def supervisor_response(state):
-    # The supervisor generates a response to the user with awareness of agents and tools.
     import streamlit as st
-    model_name = st.session_state.get("model_name", "gpt-3.5-turbo")
-    #api_key = st.secrets["general"]["openai_api_key"]
-    llm = ChatOpenAI(api_key=API_KEY, model_name=model_name)
+    from main import get_datasets_info_for_active_datasets  # Adjust import as needed
 
-    # Prepend a system message that includes agent and tool capabilities
+    model_name = st.session_state.get("model_name", "gpt-3.5-turbo")
+    if model_name == "o3-mini":
+        llm = ChatOpenAI(api_key=API_KEY, model_name=model_name)
+    else:
+        llm = ChatOpenAI(api_key=API_KEY, model_name=model_name)
+
+    # Build dataset context from the active (selected) datasets only.
+    active_datasets_info = get_datasets_info_for_active_datasets(st.session_state)
+    datasets_text = ""
+    if active_datasets_info:
+        for i, info in enumerate(active_datasets_info, 1):
+            datasets_text += (
+                f"Dataset {i}:\n"
+                f"Name: {info['name']}\n"
+                f"DOI: {info['doi']}\n"
+                f"Description: {info['description']}\n"
+                f"Parameters: {info.get('parameters', '')}\n\n"
+            )
+    else:
+        datasets_text = "No active dataset selected."
+
+    # Build the system prompt using the active dataset context.
     system_message = (
-        "You are a supervisor aware of the following agents and their capabilities:\n\n"
-        "- **VisualizationAgent:** Generates various plots using the dataset with tools like Python_REPL, reflect_on_image, install_package, and get_example_of_visualizations.\n"
-        "- **DataFrameAgent:** Performs data analysis and manipulation on the dataset using pandas.\n"
-        "- **HardCodedVisualizationAgent:** Only can plot master track maps using predefined functions (Call only if you are 100% sure that you need a map of a master track map from an expedition, otherwise call Visualization agent).\n"
-        "- **OceanographerAgent:** Only can plot TS diagram. (Call only if you are 100% sure that you need to create a TS diagram, otherwise call Visualization agent).\n\n"
-        "VisualizationAgent also have access to the following tools:\n"
-        "- **Python_REPL:** Executes Python code for data analysis and visualization.\n"
-        "- **reflect_on_image:** Provides feedback on generated images to improve their quality.\n"
-        "- **install_package:** Installs necessary Python packages when encountering missing modules.\n"
-        "- **get_example_of_visualizations:** Retrieves example visualization code related to user queries.\n\n"
-        "When responding directly to the user, leverage your knowledge of these agents and tools to provide informative and context-aware answers."
-        "IMPORTANT! As you are the last agent to be called, you will always return the results of the last agents! "
+        "You are a supervisor capable of answering simple questions directly. "
+        "If the user's query is basic (e.g., about available analysis), "
+        "answer using the selected dataset context below:\n\n"
+        f"{datasets_text}\n\n"
+        "For complex queries, follow these agent guidelines:\n"
+        "- Use VisualizationAgent for general plotting\n"
+        "- Use HardCodedVisualizationAgent ONLY for track maps\n"
+        "- Use OceanographerAgent ONLY for TS diagrams\n"
+        "Format any code in markdown and keep responses concise."
     )
 
-    # Combine the system message with existing messages
-    messages = [{"role": "system", "content": system_message}] + state["messages"]
+    # Build the complete conversation history.
+    # Here we include both human and assistant messages with labels.
+    full_history = "\n".join([
+        f"{msg.name}: {msg.content}" for msg in state["messages"] if hasattr(msg, "content") and hasattr(msg, "name")
+    ])
 
-    # Generate response
-    response = llm.invoke(messages)
+    prompt = f"{system_message}\n\nConversation history:\n{full_history}"
 
-    # Update the state's messages with the supervisor's response
-    state["messages"] = [AIMessage(content=response.content, name="Supervisor")]
+    # Invoke the LLM with the full conversation context.
+    response = llm.invoke([HumanMessage(content=prompt)])
 
-    # Indicate the process should finish
+    # Append the supervisor's answer to the state and mark the conversation as finished.
+    state["messages"].append(AIMessage(content=response.content, name="Supervisor"))
     state["next"] = "FINISH"
-
-    # Return the updated state
     return state
+
+
+
 
 
 def create_supervisor_agent(user_query, datasets_info, memory):

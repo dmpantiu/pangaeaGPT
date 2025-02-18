@@ -2,7 +2,7 @@
 class Prompts:
     @staticmethod
     def generate_system_prompt_search(user_query, datasets_info):
-        datasets_description = "\n"
+        datasets_description = ""
         for i, row in datasets_info.iterrows():
             datasets_description += (
                 f"Dataset {i + 1}:\n"
@@ -10,18 +10,16 @@ class Prompts:
                 f"Description: {row['Short Description']}\n"
                 f"Parameters: {row['Parameters']}\n\n"
             )
-
         prompt = (
             f"The user has provided the following query: {user_query}\n"
-            "Please identify the top two datasets that best match the user's query and explain why they are the most relevant. If none are found, also report it.\n"
-            "Please respond as a polite PangaeaGPT agent and keep in mind that you are responding to a user. "
-            "The response should be at the level of ingenuity of a Nobel Prize laureate.\n"
-            "Use the following schema in your response:\n"
-            "{dataset name}\n"
-            "{reason why relevant}\n"
-            "{propose some short analysis and further questions to answer}"
+            f"Available datasets:\n{datasets_description}\n"
+            "Please identify the top two datasets that best match the user's query and explain why they are the most relevant. "
+            "Do not suggest datasets without values in the Parameters field.\n"
+            "Respond with the following schema:\n"
+            "{dataset name}\n{reason why relevant}\n{propose some short analysis and further questions to answer}"
         )
         return prompt
+
 
     @staticmethod
     def generate_pandas_agent_system_prompt(user_query, datasets_text, dataset_variables):

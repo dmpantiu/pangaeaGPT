@@ -8,6 +8,8 @@ import logging
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
+import time
+import json
 
 # Generate a unique image path for saving plots
 def generate_unique_image_path():
@@ -47,3 +49,16 @@ def get_last_python_repl_command():
         logging.warning("No Python_REPL commands found in intermediate steps.")
         return None
 
+
+def log_history_event(session_data: dict, event_type: str, details: dict):
+    if "execution_history" not in session_data:
+        session_data["execution_history"] = []  # fallback
+
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    event = {
+        "type": event_type,
+        "timestamp": timestamp
+    }
+    event.update(details)  # merges in content from details
+
+    session_data["execution_history"].append(event)

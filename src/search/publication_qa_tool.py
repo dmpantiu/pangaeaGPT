@@ -198,7 +198,12 @@ def answer_publication_questions(doi: str, question: str):
 
         retriever = load_retriever(docstore_path, chroma_path)
 
-        llm = ChatOpenAI(api_key=API_KEY, model_name="gpt-4o", temperature=0.7)
+        model_name = st.session_state.get("model_name", "gpt-3.5-turbo")
+        if model_name == "o3-mini":
+            llm = ChatOpenAI(api_key=API_KEY, model_name=model_name)
+        else:
+            llm = ChatOpenAI(api_key=API_KEY, model_name=model_name)
+
         memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
         conversation_chain = ConversationalRetrievalChain.from_llm(
             llm=llm,

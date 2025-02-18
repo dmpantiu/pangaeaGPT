@@ -55,7 +55,7 @@ def parse_res(html_content):
     }
 
 # Main search function
-def pg_search_default(query: str, count: int = 5, from_idx: int = 0, topic: Optional[str] = None,
+def pg_search_default(query: str, count: int = 15, from_idx: int = 0, topic: Optional[str] = None,
               mindate: Optional[str] = None, maxdate: Optional[str] = None, **kwargs) -> pd.DataFrame:
     check_if(count, (int,))
     check_if(topic, (str,))
