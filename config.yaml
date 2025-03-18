@@ -1,0 +1,3 @@
+# config.yaml
+#deployment_mode: huggingface  # set to "local" for local deployment, "huggingface" for third-party
+deployment_mode: local  # set to "local" for local deployment, "huggingface" for third-party

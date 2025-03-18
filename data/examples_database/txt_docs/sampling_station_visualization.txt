@@ -1,0 +1,258 @@
+--- Cell 1 ---
+sampling_station_visualization.ipynb
+!THIS EXAMPLE SHOULD BE USED ONLY WITH BATHYMETRY AND SHAPE FILES LOADED FROM THE SANDBOX, AS SHOWN BELOW!
+   - bathymetry_file = os.path.join('data', 'plotting_data', 'bathymetry', 'etopo', 'ETOPO2v2c_f4.nc') <- USE THIS!
+   - base_dir = os.path.join('data', 'plotting_data', 'shape_files') <- AND THIS!
+--- Cell 2 ---
+# Sampling Station Visualization with Bathymetry
+# ============================================
+
+import matplotlib.pyplot as plt
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+import pandas as pd
+import numpy as np
+import os
+import cartopy.io.shapereader as shpreader
+import xarray as xr
+from matplotlib.colors import LinearSegmentedColormap
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from adjustText import adjust_text
+
+# Create dummy dataset
+# -------------------
+
+# Generate sample data for 10 sampling stations
+np.random.seed(42)
+n_stations = 10
+dummy_data = {
+    'Event': [f'Station_{i+1}' for i in range(n_stations)],
+    'Latitude': np.random.uniform(50, 60, n_stations),  # Any region
+    'Longitude': np.random.uniform(-40, -20, n_stations),  # Any region
+}
+dataset_df = pd.DataFrame(dummy_data)
+
+print("Sample dataset:")
+print(dataset_df.head())
+
+# Define color palette for bathymetry
+# ---------------------------------
+
+color_dict_sampling = {
+    '0-50': '#D3C2B3', '50-100': '#D6CCC0', '100-250': '#DCD6CB', '250-500': '#D8DDCD',
+    '500-750': '#D4DDCD', '750-1000': '#C5E7CF', '1000-1250': '#B9EDD3', '1250-1500': '#AEF1D6',
+    '1500-2000': '#A8EEE7', '2000-2500': '#A5E0F3', '2500-3000': '#A0D0FC', '3000-3500': '#98C3FA',
+    '3500-4000': '#8EB3FB', '4000-4500': '#879FFF', '4500-5000': '#8597FE', '5000-5500': '#838BFE',
+    '5500-6000': '#8384FF', '6000-6500': '#8380FD', '6500-7000': '#837AFD'
+}
+
+def create_colormap(min_depth, max_depth, color_dict):
+    """
+    Create a custom colormap for bathymetry visualization
+
+    Parameters:
+    -----------
+    min_depth : float
+        Minimum depth value
+    max_depth : float
+        Maximum depth value
+    color_dict : dict
+        Dictionary mapping depth ranges to colors
+
+    Returns:
+    --------
+    tuple
+        (levels, colormap) for plotting
+    """
+    colors = []
+    for key, color in reversed(color_dict.items()):
+        colors.append(color)
+
+    if min_depth > 0:
+        min_depth = 0
+    levels = np.linspace(min_depth, max_depth, len(colors) + 1)
+    cmap = LinearSegmentedColormap.from_list('custom_cmap', colors, N=len(levels) - 1)
+    return levels, cmap
+
+# Load and prepare bathymetry data
+# ------------------------------
+
+def load_bathymetry(extent):
+    """
+    Load bathymetry data for the given extent
+
+    Parameters:
+    -----------
+    extent : tuple
+        (min_lon, max_lon, min_lat, max_lat)
+
+    Returns:
+    --------
+    xarray.DataArray
+        Bathymetry data
+    """
+    # Path to bathymetry file (ETOPO2v2)
+    bathymetry_file = os.path.join('data', 'plotting_data', 'bathymetry', 'etopo', 'ETOPO2v2c_f4.nc')
+
+    ds = xr.open_dataset(bathymetry_file)
+    bathymetry = ds['z'].sel(
+        x=slice(extent[0], extent[1]),
+        y=slice(extent[2], extent[3])
+    )
+
+    # Filter to include only depths (negative values)
+    return bathymetry.where(bathymetry < 0, drop=True)
+
+# Main plotting function
+# --------------------
+
+def plot_sampling_stations(main_title, dataset_df, lat_col='Latitude', lon_col='Longitude'):
+    """
+    Create a map visualization of sampling stations with bathymetry
+
+    Parameters:
+    -----------
+    main_title : str
+        Title for the plot
+    dataset_df : pandas.DataFrame
+        DataFrame containing sampling station data
+    lat_col : str
+        Name of latitude column
+    lon_col : str
+        Name of longitude column
+    """
+    # Calculate map extent with padding
+    padding = 7
+    extent = [
+        dataset_df[lon_col].min() - padding,
+        dataset_df[lon_col].max() + padding,
+        dataset_df[lat_col].min() - padding,
+        dataset_df[lat_col].max() + padding
+    ]
+
+    # Load bathymetry data
+    bathymetry = load_bathymetry(extent)
+
+    # Create colormap
+    min_depth = bathymetry.min().item()
+    max_depth = bathymetry.max().item()
+    levels, custom_cmap = create_colormap(min_depth, max_depth, color_dict_sampling)
+
+    # Calculate aspect ratio and figure size
+    lon_range = extent[1] - extent[0]
+    lat_range = extent[3] - extent[2]
+    aspect_ratio = lon_range / lat_range
+    width = 15
+    height = width / aspect_ratio
+
+    # Create figure and plot
+    fig, ax = plt.subplots(figsize=(width, height),
+                          subplot_kw={'projection': ccrs.PlateCarree()})
+    ax.set_extent(extent, crs=ccrs.PlateCarree())
+
+    # Plot bathymetry
+    bathy_plot = ax.contourf(bathymetry.x, bathymetry.y, bathymetry,
+                            levels=levels, cmap=custom_cmap,
+                            transform=ccrs.PlateCarree())
+
+    # Add coastlines and land features
+    base_dir = os.path.join('data', 'plotting_data', 'shape_files')
+
+    for feature_name in ['ocean', 'land', 'coastline']:
+        shp = shpreader.Reader(os.path.join(base_dir, f'ne_10m_{feature_name}',
+                                          f'ne_10m_{feature_name}.shp'))
+
+        if feature_name == 'land':
+            ax.add_geometries(shp.geometries(), ccrs.PlateCarree(),
+                            facecolor='lightgray', edgecolor='black', zorder=1)
+        else:
+            ax.add_geometries(shp.geometries(), ccrs.PlateCarree(),
+                            facecolor='none', edgecolor='black',
+                            zorder=0 if feature_name == 'ocean' else 2)
+
+    # Add gridlines
+    ax.gridlines(draw_labels=True)
+
+    # Plot stations
+    ax.scatter(dataset_df[lon_col], dataset_df[lat_col],
+              color='red', s=20, zorder=3,
+              transform=ccrs.PlateCarree())
+
+    # Add station labels
+    texts = []
+    x_offset = lon_range * 0.01
+    y_offset = lat_range * 0.01
+
+    for _, row in dataset_df.iterrows():
+        texts.append(ax.text(
+            row[lon_col] + x_offset,
+            row[lat_col] + y_offset,
+            row['Event'],
+            transform=ccrs.PlateCarree(),
+            fontsize=10,
+            ha='left', va='bottom',
+            color='black', weight='bold',
+            bbox=dict(facecolor='white', alpha=0.7, boxstyle='round,pad=0.3')
+        ))
+
+    # Add title
+    plt.title(main_title, y=1.05, fontsize=15, weight='bold')
+
+    # Add colorbar
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="4%", pad=0.75, axes_class=plt.Axes)
+    plt.colorbar(bathy_plot, cax=cax, orientation='vertical', label='Depth (m)')
+
+    .... #Use plt.savefig(plot_path); As requested by the chat prompt.
+
+# Example usage
+# ------------
+
+# Create the visualization
+plot_sampling_stations(
+    main_title='[Name of the Region] Sampling Stations',
+    dataset_df=dataset_df
+)
+
+"""
+Usage Notes:
+-----------
+1. Data Requirements:
+   - Dataset must have columns for latitude, longitude, and station/event names
+   - Bathymetry file SHOULD BE USED (ETOPO2v2c_f4.nc) must be in the correct path
+   - bathymetry_file = os.path.join('data', 'plotting_data', 'bathymetry', 'etopo', 'ETOPO2v2c_f4.nc') <- USE THIS!
+   - Shape files must be in the correct directory structure
+   - base_dir = os.path.join('data', 'plotting_data', 'shape_files') <- AND THIS!
+
+!IMPORTANT! The data below is loaded to your sandbox and you intended to use it !/IMPORTANT!
+2. Directory Structure:
+   data/
+   ├── plotting_data/
+   │   ├── bathymetry/
+   │   │   └── etopo/
+   │   │       └── ETOPO2v2c_f4.nc
+   │   └── shape_files/
+   │       ├── ne_10m_ocean/
+   │       ├── ne_10m_land/
+   │       └── ne_10m_coastline/
+
+3. Dependencies:
+   - matplotlib
+   - cartopy
+   - pandas
+   - numpy
+   - xarray
+   - adjustText
+
+4. Customization:
+   - Color scheme can be modified by adjusting color_dict_sampling
+   - Padding around the stations can be adjusted in plot_sampling_stations
+   - Figure size and aspect ratio can be modified
+   - Label placement can be fine-tuned through adjust_text parameters
+   - NEVER USE PACKAGE 'adjust_text' IT WILL FAIL CODE EXECUTION.
+"""
+
+
+--- Cell 3 ---
+
+

@@ -1,0 +1,197 @@
+--- Cell 1 ---
+TS_profile.ipynb
+
+--- Cell 2 ---
+# CTD Profile Visualization with Dummy Data
+# =======================================
+
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+
+# Generate dummy CTD data
+# ---------------------
+
+def generate_dummy_ctd_data(n_points=1000):
+    """
+    Generate synthetic CTD data that mimics realistic profiles
+    
+    Parameters:
+    -----------
+    n_points : int
+        Number of depth points to generate
+        
+    Returns:
+    --------
+    pandas.DataFrame
+        DataFrame containing pressure, temperature, and salinity data
+    """
+    # Create depth array (0 to 1000m)
+    pressure = np.linspace(0, 1000, n_points)
+    
+    # Generate temperature profile with thermocline
+    temp_surface = 20  # Surface temperature
+    temp_bottom = 4    # Bottom temperature
+    thermocline_depth = 200  # Depth of thermocline
+    
+    # Create temperature profile with realistic noise
+    temperature = np.zeros(n_points)
+    for i, p in enumerate(pressure):
+        if p < thermocline_depth:
+            # Linear decrease in mixed layer
+            temperature[i] = temp_surface - (p/thermocline_depth) * 8
+        else:
+            # Exponential decrease below thermocline
+            temperature[i] = temp_bottom + (temp_surface - temp_bottom - 8) * np.exp(-(p-thermocline_depth)/300)
+    
+    # Add some noise to temperature
+    temperature += np.random.normal(0, 0.1, n_points)
+    
+    # Generate salinity profile
+    salinity_surface = 34.5
+    salinity_bottom = 35.5
+    
+    # Create salinity profile with realistic structure
+    salinity = np.zeros(n_points)
+    for i, p in enumerate(pressure):
+        if p < thermocline_depth:
+            # Slight increase in mixed layer
+            salinity[i] = salinity_surface + (p/thermocline_depth) * 0.5
+        else:
+            # Gradual increase to bottom value
+            salinity[i] = salinity_surface + 0.5 + (salinity_bottom - salinity_surface - 0.5) * \
+                         (1 - np.exp(-(p-thermocline_depth)/500))
+    
+    # Add some noise to salinity
+    salinity += np.random.normal(0, 0.02, n_points)
+    
+    # Create DataFrame
+    ctd_data = pd.DataFrame({
+        'Pressure': pressure,
+        'Temperature': temperature,
+        'Salinity': salinity
+    })
+    
+    return ctd_data
+
+# Create dummy dataset
+# ------------------
+ctd_data = generate_dummy_ctd_data()
+
+print("Sample of generated CTD data:")
+print(ctd_data.head())
+print("\nData statistics:")
+print(ctd_data.describe())
+
+# Plotting function
+# ---------------
+
+def plot_ctd_profiles(data, main_title="CTD Profile", 
+                     pressure_col='Pressure', 
+                     temperature_col='Temperature', 
+                     salinity_col='Salinity'):
+    """
+    Create a CTD profile plot with temperature and salinity
+    
+    Parameters:
+    -----------
+    data : pandas.DataFrame
+        DataFrame containing CTD data
+    main_title : str
+        Title for the plot
+    pressure_col : str
+        Name of pressure/depth column
+    temperature_col : str
+        Name of temperature column
+    salinity_col : str
+        Name of salinity column
+    """
+    # Create figure and primary axis
+    fig, ax1 = plt.subplots(figsize=(10, 12))
+    
+    # Plot temperature profile
+    temp_line = ax1.plot(data[temperature_col], data[pressure_col], 
+                        'r-', label='Temperature', linewidth=2)
+    ax1.set_xlabel('Temperature (°C)', color='r', fontsize=12)
+    ax1.set_ylabel('Pressure (dbar)', fontsize=12)
+    ax1.tick_params(axis='x', labelcolor='r')
+    
+    # Invert y-axis to show depth increasing downward
+    ax1.invert_yaxis()
+    
+    # Create secondary axis for salinity
+    ax2 = ax1.twiny()
+    sal_line = ax2.plot(data[salinity_col], data[pressure_col], 
+                       'b-', label='Salinity', linewidth=2)
+    ax2.set_xlabel('Salinity (PSU)', color='b', fontsize=12)
+    ax2.tick_params(axis='x', labelcolor='b')
+    
+    # Add grid
+    ax1.grid(True, linestyle='--', alpha=0.7)
+    
+    # Combine legends
+    lines = temp_line + sal_line
+    labels = [l.get_label() for l in lines]
+    ax1.legend(lines, labels, loc='lower right', fontsize=10)
+    
+    # Set title
+    plt.title(main_title, pad=20, fontsize=14, fontweight='bold')
+    
+    # Adjust layout
+    plt.tight_layout()
+    
+    return fig
+
+# Create and display the plot
+# -------------------------
+fig = plot_ctd_profiles(ctd_data, main_title="Sample CTD Profile - [.... Region]")
+plt.show()
+
+"""
+Usage Notes:
+-----------
+1. Data Requirements:
+   - DataFrame must contain columns for pressure (depth), temperature, and salinity
+   - Pressure should be in dbar or meters
+   - Temperature should be in degrees Celsius
+   - Salinity should be in PSU
+
+2. Customization Options:
+   - Adjust figure size in plot_ctd_profiles function
+   - Modify line colors and styles
+   - Change grid properties
+   - Adjust axis labels and title formatting
+
+3. Features:
+   - Dual axis plot showing temperature and salinity profiles
+   - Inverted pressure axis to show depth increasing downward
+   - Grid lines for easier reading
+   - Color-coded axes and lines for clear distinction between parameters
+   - Legend showing both parameters
+
+4. Example Usage with Real Data:
+```python
+# Load your real CTD data
+real_ctd_data = pd.read_csv('your_ctd_data.csv')
+
+# Create plot
+plot_ctd_profiles(
+    real_ctd_data,
+    main_title="CTD Profile - Station XX",
+    pressure_col='your_pressure_column',
+    temperature_col='your_temperature_column',
+    salinity_col='your_salinity_column'
+)
+```
+
+Note: The dummy data generator creates realistic-looking CTD profiles
+with typical features like:
+- Surface mixed layer
+- Thermocline
+- Deep water properties
+- Realistic noise in measurements
+"""
+
+--- Cell 3 ---
+
+

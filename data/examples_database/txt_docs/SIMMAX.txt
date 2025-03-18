@@ -1,0 +1,173 @@
+--- Cell 1 ---
+SIMMAX.ipynb
+
+--- Cell 2 ---
+# Paleotemperatures with SIMMAX 
+
+--- Cell 3 ---
+from pangaeapy import PanDataSet
+import math
+import sys
+import pandas as pd
+analogDS = PanDataSet('10.1594/PANGAEA.77352')
+sampleDS=PanDataSet('10.1594/PANGAEA.55156')
+#The annual mean
+#levitus=pd.read_csv('woa13_decav_t00mn01v2.csv',sep=';')
+#summer
+levitus=pd.read_csv('woa13_decav_t15mn01.csv',sep=';')
+
+#Compare with:
+#http://discovery.ucl.ac.uk/101363/1/2002PA000774.pdf
+
+--- Cell 4 ---
+def getLevitusTemp(lat, lon, lev):
+    depth=30
+    t=0
+    #select the values for the upper water column
+    temp=lev[['0','5','10','15','20','25','30','35','40','45','50']][(lev['LATITUDE']== (math.floor(lat)+0.5)) & (lev['LONGITUDE']== (math.floor(lon)+0.5))]
+    #delete empty cells
+    temp=temp.dropna(axis=1).to_dict(orient='list')
+    #cast dict keys from string to int
+    temp={int(key): value for key, value in temp.items()} 
+    temp_keys=list(temp.keys())
+    #find the closest available water depth value
+    closest=min(temp_keys, key=lambda x:abs(x-depth))
+    if len(temp[closest])>0:
+        t=temp[closest][0]
+        if t==None:
+            print(str(lat)+' x '+str(lon))
+            t=0
+    else:
+        print(str(lat)+' + '+str(lon))
+        t=0
+    return t
+analogDS.data['Temperature']=analogDS.data.apply(lambda x: getLevitusTemp(x['Latitude'],x['Longitude'], levitus), axis=1)
+
+--- Cell 5 ---
+sampleDS.data[(sampleDS.data['Event']=='GIK16458-1')].head()
+
+--- Cell 6 ---
+#Sometimes the dataset also contains data from different depths of one event, we simplify the procedure here a bit and remove event duplicates e.g. deeper samples
+sampleDS.data.drop_duplicates(subset='Event', keep='first', inplace=True)
+sampleDS.data[(sampleDS.data['Event']=='GIK16458-1')].head()
+
+--- Cell 7 ---
+def getDistance(row):
+    
+    R = 6372800  # Earth radius in meters
+    lat1, lon1 = row['Latitude1'], row['Longitude1']
+    lat2, lon2 = row['Latitude2'], row['Longitude2']
+    
+    phi1, phi2 = math.radians(lat1), math.radians(lat2) 
+    dphi       = math.radians(lat2 - lat1)
+    dlambda    = math.radians(lon2 - lon1)
+    
+    a = math.sin(dphi/2)**2 + \
+        math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
+    
+    return 2*R*math.atan2(math.sqrt(a), math.sqrt(1 - a))/1000
+#Remove duplicates
+
+#Merge to receive a sampl x analog matrix
+Distances = pd.merge(sampleDS.data[['Event','Latitude','Longitude', 'Depth']].assign(k=1), analogDS.data[['Event','Latitude','Longitude','Temperature']].assign(k=1), on='k', suffixes=('1', '2')).drop('k', axis=1)
+Distances['Event1']=Distances['Event1']+'_'+Distances['Depth'].map(str)
+Distances['Distance']=Distances.apply(getDistance, axis=1)
+#But we need to avoid to run into a division by zero trap, preperae by the simmean algo which will snap if distance is zero: (sj/dj)
+#Therefore we need to replace zero distances by a very, very low distance e.g. 0.000000001 m or so
+Distances.loc[Distances['Distance']==0,'Distance']=0.00000000001
+Distances.set_index(['Event1', 'Event2'], inplace=True)  
+
+--- Cell 8 ---
+Distances.head()  
+
+--- Cell 9 ---
+#Forams used by Pflaumann et. al in SIMMAX28
+#G. mentum = Globorotalia cultrata and tumida
+foramCols=[]
+foramParams=['G. bulloides','G. calida','G. falconensis','G. quinqueloba','G. rubescens','G. digitata','G. aequilateralis',
+             'G. conglobatus','G. ruber p','G. ruber w', 'G. tenellus','G. trilobus tril','G. trilobus sac','O. universa',
+             'S. dehiscens','G. crassaformis','G. mentum', 'G. hirsuta', 'G. inflata', 'G. scitula','G. truncatulinoides',
+             'N. dutertrei','N. pachyderma s','P/D int','G. glutinata','P. obliquiloculata']
+
+for fP in foramParams:
+    if fP in sampleDS.data.columns:
+        foramCols.append(fP)
+
+--- Cell 10 ---
+#Lets do the SIMMAX
+import numpy as np
+#sum of squared percentages 
+sampleDS.data['SQRTSUM']=np.sqrt((sampleDS.data[foramCols]**2).sum(axis=1))
+analogDS.data['SQRTSUM']=np.sqrt((analogDS.data[foramCols]**2).sum(axis=1))
+sampleIdx=sampleDS.data[foramCols].div(sampleDS.data['SQRTSUM'], axis=0)
+analogIdx=analogDS.data[foramCols].div(analogDS.data['SQRTSUM'], axis=0)
+sampleIdx['Event']=sampleDS.data['Event']+'_'+sampleDS.data['Depth'].map(str)
+sampleIdx.set_index('Event', inplace=True)
+analogIdx['Event']=analogDS.data['Event']
+analogIdx.set_index('Event', inplace=True)
+SimIndex = pd.DataFrame(
+    (analogIdx[foramCols].values * sampleIdx[foramCols].values[:, None]).reshape(-1, analogIdx.shape[1]),
+    pd.MultiIndex.from_product([sampleIdx.index, analogIdx.index]),
+   sampleIdx.columns
+)
+Similars=pd.DataFrame(SimIndex.sum(axis=1), columns=['Similarity'])
+Similars['Distance']=Distances['Distance']
+Similars['Latitude']=Distances['Latitude1']
+Similars['Longitude']=Distances['Longitude1']
+Similars['Temperature']=Distances['Temperature']
+
+--- Cell 11 ---
+
+#s=Similars.loc['PS1231-2'].sort_values(['Similarity'],ascending=False)
+#s[s['Similarity']>=0.999]
+s=Similars[Similars['Similarity']>=0.999]
+
+--- Cell 12 ---
+#Original SIMMAX is using those values with similarity index >0.79 only
+#mostSimilars=Similars.loc[(Similars['Similarity']>=0.79)]
+#The revised SIMMAX is using the 10 top most similars with sim inded >0.9
+mostSimilars=Similars[Similars['Similarity']>=0.9].sort_values(by='Similarity',ascending=False).groupby(level=0).head(10).sort_index(level=0,sort_remaining=False)
+mostSimilars.index.names=['sampleEvent', 'analogEvent']  
+mostSimilars
+
+--- Cell 13 ---
+analogDS.data[analogDS.data['Event'].isin(['V27-23','PS1707-1','RC13-275','RC11-79'])]
+
+--- Cell 14 ---
+#Paleotemperature calculations following Pflaumann's Formula (3)
+PaleoTemp=pd.DataFrame()
+PaleoTemp['TEMP']=((mostSimilars['Temperature']*mostSimilars['Similarity']/ mostSimilars['Distance']).groupby(level=0).sum())/((mostSimilars['Similarity']/mostSimilars['Distance']).groupby(level=0).sum())
+
+PaleoTemp['LAT']=mostSimilars.groupby(level=0)['Latitude'].max()
+PaleoTemp['LON']=mostSimilars.groupby(level=0)['Longitude'].max()
+
+--- Cell 15 ---
+import cartopy.crs as ccrs
+import cartopy.feature as feat
+import matplotlib.pyplot as plt
+proj=ccrs.LambertCylindrical()
+plt.figure(figsize=(10,10),dpi=200)
+ax = plt.axes(projection=proj)
+land_50m = feat.NaturalEarthFeature('physical', 'land', '50m',edgecolor='grey',facecolor=feat.COLORS['land'])
+
+#PaleoTemp = PaleoTemp[np.isfinite(PaleoTemp['TEMP'])]
+#print(PaleoTemp)
+
+ax.tricontourf(PaleoTemp['LON'],PaleoTemp['LAT'], PaleoTemp['TEMP'],levels=[1,1.5,2,2.5,3.5,4,5,6,8,12,16,20,22,24,26,28],cmap = "rainbow",transform=ccrs.Geodetic())
+ax.add_feature(land_50m)
+ax.scatter(PaleoTemp['LON'],PaleoTemp['LAT'],label=None, alpha=0.5, s=1,cmap = "rainbow",transform=ccrs.Geodetic())
+
+for i, point in PaleoTemp.iterrows():
+        ax.text(point['LON'], point['LAT'], str(point['TEMP'].round(1)),fontsize=7, transform=ccrs.Geodetic())
+
+--- Cell 16 ---
+## References:
+
+--- Cell 17 ---
+print(analogDS.citation)
+print()
+print(sampleDS.citation)
+
+--- Cell 18 ---
+
+

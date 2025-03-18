@@ -1,0 +1,36 @@
+# Ignore virtual environments
+.venv/
+
+# Ignore Python cache files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Ignore environment variables
+.env
+
+# Ignore macOS specific files
+.DS_Store
+
+# Ignore PyCharm project files
+.idea/
+
+
+# Ignore logs
+logs/
+
+# Ignore Streamlit configuration files
+.streamlit/
+
+# Ignore specific files
+save.py
+files.py
+project_structure.txt
+project_files_structure.txt
+transit.json
+directory_structure.txt
+pangaea_session_history.json
+
+# Ignore temporary files
+tmp/figs/
