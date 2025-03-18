@@ -194,7 +194,8 @@ class CustomPythonREPLTool(PythonREPLTool):
                         error_output += f"- {key}: {local_context[key]}\n"
             
             elif "ModuleNotFoundError" in str(e):
-                error_output += f'Missing module: {str(e).split("No module named ")[-1].strip("\'")}\n'
+                module_name = str(e).split("No module named ")[-1].strip("'")
+                error_output += f"Missing module: {module_name}\\n"
                 error_output += "You can install it using the install_package tool."
             
             elif "name 'data' is not defined" in str(e) or "not defined" in str(e):
