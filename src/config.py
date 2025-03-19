@@ -23,10 +23,21 @@ if DEPLOYMENT_MODE == "local":
     LANGCHAIN_API_KEY = st.secrets["general"]["langchain_api_key"]
     # Use the environment variable if it exists; otherwise, fall back to st.secrets
     LANGCHAIN_PROJECT_NAME = os.environ.get("LANGCHAIN_PROJECT_NAME", st.secrets["general"]["langchain_project_name"])
+    
+    # Get LangChain region from secrets or default to 'us'
+    LANGCHAIN_REGION = os.environ.get("LANGCHAIN_REGION", 
+                                      st.secrets["general"].get("langchain_region", "us"))
 else:
     API_KEY = os.environ.get("OPENAI_API_KEY", "")
     LANGCHAIN_API_KEY = os.environ.get("LANGCHAIN_API_KEY", "")
     LANGCHAIN_PROJECT_NAME = os.environ.get("LANGCHAIN_PROJECT_NAME", "")
+    LANGCHAIN_REGION = os.environ.get("LANGCHAIN_REGION", "us")  # default to 'us' if not specified
+
+# Set the appropriate LangChain endpoint based on region
+if LANGCHAIN_REGION.lower() == "eu":
+    LANGCHAIN_ENDPOINT = "https://eu.api.smith.langchain.com"
+else:  # Default to US
+    LANGCHAIN_ENDPOINT = "https://api.smith.langchain.com"
 
 # --- Logging Setup (unchanged) ---
 logs_dir = os.path.join(os.getcwd(), 'logs')

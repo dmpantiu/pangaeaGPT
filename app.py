@@ -108,10 +108,28 @@ with st.sidebar:
 # === Step 3: Update Environment Variables for LangSmith Keys ===
 langchain_api_key = st.session_state.get("langsmith_api_key") or ""
 langchain_project_name = st.session_state.get("langsmith_project_name") or ""
+
+# Add region support
+if DEPLOYMENT_MODE == "local":
+    try:
+        langchain_region = st.secrets["general"].get("langchain_region", "us")
+    except KeyError:
+        langchain_region = "us"  # Default to US region
+else:
+    langchain_region = "us"  # Default for non-local deployment
+
+# Set the endpoint based on region
+if langchain_region.lower() == "eu":
+    langchain_endpoint = "https://eu.api.smith.langchain.com"
+else:
+    langchain_endpoint = "https://api.smith.langchain.com"
+
 if langchain_api_key and langchain_project_name:
     os.environ["LANGCHAIN_TRACING_V2"] = "true"
     os.environ["LANGCHAIN_API_KEY"] = langchain_api_key
     os.environ["LANGCHAIN_PROJECT_NAME"] = langchain_project_name
+    os.environ["LANGCHAIN_ENDPOINT"] = langchain_endpoint
+    os.environ["LANGCHAIN_REGION"] = langchain_region
 
 # === Step 4: Reload the Config Module so It Picks Up the Updated Environment Variables ===
 import src.config as config
