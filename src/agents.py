@@ -9,7 +9,7 @@ import uuid
 import json
 import re
 from io import StringIO
-from typing import List, Annotated, Sequence, TypedDict, Dict
+from typing import List, Annotated, Sequence, TypedDict, Dict, Optional
 import operator
 from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -246,27 +246,34 @@ class CustomPythonREPLTool(PythonREPLTool):
         }
 
 
-def search_pg_datasets_tool(query):
+def search_pg_datasets_tool(query: str, mindate: Optional[str] = None, maxdate: Optional[str] = None,
+                           minlat: Optional[float] = None, maxlat: Optional[float] = None,
+                           minlon: Optional[float] = None, maxlon: Optional[float] = None):
     global prompt_search
 
-    datasets_info = pg_search_default(query)
+    # Log the parameters for debugging
+    logging.info(f"Searching with query: {query}, mindate: {mindate}, maxdate: {maxdate}, "
+                 f"minlat: {minlat}, maxlat: {maxlat}, minlon: {minlon}, maxlon: {maxlon}")
+
+    # Call the search function with all parameters
+    datasets_info = pg_search_default(query, mindate=mindate, maxdate=maxdate,
+                                     minlat=minlat, maxlat=maxlat, minlon=minlon, maxlon=maxlon)
 
     logging.debug("Datasets info: %s", datasets_info)
 
     if not datasets_info.empty:
         st.session_state.datasets_info = datasets_info
         st.session_state.messages_search.append({
-            "role": "assistant", 
-            "content": f"**Search query:** {query}"
+            "role": "assistant",
+            "content": f"**Search query:** {query} (mindate: {mindate}, maxdate: {maxdate}, "
+                       f"minlat: {minlat}, maxlat: {maxlat}, minlon: {minlon}, maxlon: {maxlon})"
         })
-        # Pass the table as JSON (you can use orient="split" or the default, as long as your UI can parse it)
         st.session_state.messages_search.append({
-            "role": "assistant", 
-            "content": "**Datasets Information:**", 
+            "role": "assistant",
+            "content": "**Datasets Information:**",
             "table": datasets_info.to_json(orient="split")
         })
 
-        # Optionally, build a detailed description string for the prompt:
         datasets_description = ""
         for i, row in datasets_info.iterrows():
             datasets_description += (
@@ -295,18 +302,33 @@ def create_search_agent(datasets_info=None):
     else:
         llm = ChatOpenAI(api_key=API_KEY, model_name=model_name)
 
-    # Generate dataset description string
+    # Generate dataset description string (unchanged)
     datasets_description = ""
     if datasets_info is not None:
         for i, row in datasets_info.iterrows():
             datasets_description += f"Dataset {i + 1}:\nName: {row['Name']}\nDOI: {row['DOI']}\nDescription: {row['Short Description']}\nParameters: {row['Parameters']}\n\n"
-
+    
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system",
-             f"You are a powerful assistant primarily designed to search and retrieve datasets from PANGAEA. Your main goal is to help users find relevant datasets using the search_pg_datasets tool. When a user asks about datasets, always use this tool first to provide the most up-to-date and accurate information.\n\n"
-             #f"Here are some datasets returned from the search:\n{datasets_description}"
-             "In addition to dataset searches, you have a secondary capability to answer questions about publications related to specific datasets (or in other words what was published based on this dataset). If a user explicitly asks about publications or research findings based on a particular dataset, you can use the answer_publication_questions tool. For example, you can handle queries like 'What was published based on this dataset?' or 'What were the main conclusions from the research using this dataset?'\n\n"
+            "You’re a dataset search assistant for PANGAEA, using the search_pg_datasets tool. Pass the right parameters every time.\n\n"
+            "**Dates:**\n"
+            "- If the user gives dates (e.g., 'from 2015', '2000s', 'before 2020'), set `mindate` and/or `maxdate` in 'YYYY-MM-DD'.\n"
+            "- Single year (e.g., '2021') → `mindate='2021-01-01'`, `maxdate='2021-12-31'`.\n"
+            "- No dates? Leave `mindate` and `maxdate` blank.\n\n"
+            "**Spatial:**\n"
+            "- If the user names a region (e.g., 'Laptev Sea', 'Fram Strait') or coords (e.g., 'north of 60N'), *always* set `minlat`, `maxlat`, `minlon`, `maxlon` in decimal degrees.\n"
+            "- Named regions? Use rough coords and extend by ±3 degrees to capture a broader area (e.g., 'Fram Strait' → `minlat=74.0`, `maxlat=84.0`, `minlon=-13.0`, `maxlon=13.0` from typical 77-81°N, -10 to 10°E).\n"
+            "- Specific coords (e.g., 'between 40N and 50N')? Use the exact values without extension.\n"
+            "- No location? Leave spatial params blank.\n\n"
+            "**Examples:**\n"
+            "- 'Temperature salinity data from Laptev Sea in 2000s' → `query='temperature salinity'`, `mindate='2000-01-01'`, `maxdate='2009-12-31'`, `minlat=67.0`, `maxlat=83.0`, `minlon=87.0`, `maxlon=143.0` (extended from 70-80°N, 90-140°E)\n"
+            "- 'Ocean data Fram Strait 2020' → `query='ocean data'`, `mindate='2020-01-01'`, `maxdate='2020-12-31'`, `minlat=74.0`, `maxlat=84.0`, `minlon=-13.0`, `maxlon=13.0` (extended from 77-81°N, -10 to 10°E)\n"
+            "- 'Zooplankton data' → `query='zooplankton'` (no dates or spatial)\n"
+            "- 'Data between 40N and 50N' → `query=''`, `minlat=40.0`, `maxlat=50.0`, `minlon` and `maxlon` blank (exact values, no extension)\n\n"
+            "**Rules:**\n"
+            "- For named regions, extend the coordinate range by ±3 degrees to account for sampling variations.\n"
+            "- For specific coordinates, use the exact values provided.\n"
              "Remember:\n"
              "1. Prioritize dataset searches using the search_pg_datasets tool. Make sure that the query you pass to the tool is rephrased so that elastic search gives the best match. Also try not to include words like 'search' and etc. in the search query.\n"
              "2. Only use the answer_publication_questions tool when the user specifically asks about publications or research findings related to a dataset they've already identified. Please make sure that you correctly pass the doi to the tool. It should be doi retrieved after the search (user will point out which dataset it interested in). DO NOT GENERATE DOI ON THIS STEP OUT OF YOUR MIND! JUST TAKE WHAT WAS GIVEN WITH SYSTEM PROMPT.\n"
@@ -319,10 +341,20 @@ def create_search_agent(datasets_info=None):
         ]
     )
 
+    class SearchPangaeaArgs(BaseModel):
+        query: str = Field(description="The search query string.")
+        mindate: Optional[str] = Field(default=None, description="The minimum date in 'YYYY-MM-DD' format.")
+        maxdate: Optional[str] = Field(default=None, description="The maximum date in 'YYYY-MM-DD' format.")
+        minlat: Optional[float] = Field(default=None, description="The minimum latitude in decimal degrees.")
+        maxlat: Optional[float] = Field(default=None, description="The maximum latitude in decimal degrees.")
+        minlon: Optional[float] = Field(default=None, description="The minimum longitude in decimal degrees.")
+        maxlon: Optional[float] = Field(default=None, description="The maximum longitude in decimal degrees.")
+
     search_tool = StructuredTool.from_function(
         func=search_pg_datasets_tool,
         name="search_pg_datasets",
-        description="List datasets from PANGAEA based on a query"
+        description="List datasets from PANGAEA based on a query, with optional date and spatial filters.",
+        args_schema=SearchPangaeaArgs
     )
 
     publication_qa_tool = StructuredTool.from_function(

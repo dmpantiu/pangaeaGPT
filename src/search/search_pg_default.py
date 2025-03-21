@@ -61,19 +61,31 @@ def parse_res(html_content):
 
 # Main search function
 def pg_search_default(query: str, count: int = 15, from_idx: int = 0, topic: Optional[str] = None,
-              mindate: Optional[str] = None, maxdate: Optional[str] = None, **kwargs) -> pd.DataFrame:
+                      mindate: Optional[str] = None, maxdate: Optional[str] = None,
+                      minlat: Optional[float] = None, maxlat: Optional[float] = None,
+                      minlon: Optional[float] = None, maxlon: Optional[float] = None, **kwargs) -> pd.DataFrame:
+    # Type checking for all parameters
     check_if(count, (int,))
     check_if(topic, (str,))
     check_if(mindate, (str,))
     check_if(maxdate, (str,))
+    check_if(minlat, (float, int))  # Allow integers as well
+    check_if(maxlat, (float, int))
+    check_if(minlon, (float, int))
+    check_if(maxlon, (float, int))
 
+    # Build parameters dictionary, converting floats to strings for API
     params = pgc({
         'q': query,
         'count': count,
         'offset': from_idx,
         'topic': topic,
         'mindate': mindate,
-        'maxdate': maxdate
+        'maxdate': maxdate,
+        'minlat': str(minlat) if minlat is not None else None,
+        'maxlat': str(maxlat) if maxlat is not None else None,
+        'minlon': str(minlon) if minlon is not None else None,
+        'maxlon': str(maxlon) if maxlon is not None else None
     })
 
     url = "https://www.pangaea.de/advanced/search.php"
@@ -99,10 +111,7 @@ def pg_search_default(query: str, count: int = 15, from_idx: int = 0, topic: Opt
         res.update(parsed_res)
 
         name = res.get('citation', 'No name available')
-
-        # Fetch detailed metadata using pangaeapy
         abstract, parameters = fetch_dataset_details(res['doi'])
-        print(abstract, parameters)
         short_description = " ".join(abstract.split()[:100]) + "..." if len(abstract.split()) > 100 else abstract
 
         parsed.append({
@@ -114,7 +123,7 @@ def pg_search_default(query: str, count: int = 15, from_idx: int = 0, topic: Opt
             'Short Description': short_description,
             'Score': res.get('score', 0),
             'Parameters': parameters,
-            'file_urls': parsed_res['file_urls']  # Include file URLs in DataFrame
+            'file_urls': parsed_res['file_urls']
         })
 
     df = pd.DataFrame(parsed)

@@ -34,3 +34,7 @@ pangaea_session_history.json
 
 # Ignore temporary files
 tmp/figs/
+tmp/sandbox/
+
+#Ignore plotting_dat
+data/plotting_data
