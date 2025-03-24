@@ -52,7 +52,7 @@ if parent_dir not in sys.path:
 
 
 # Import custom modules
-from .search.search_pg_default import pg_search_default
+from .search.search_pg_default import pg_search_default, direct_access_doi
 from .search.publication_qa_tool import answer_publication_questions, PublicationQAArgs
 from .prompts import Prompts
 from .utils import generate_unique_image_path, escape_curly_braces
@@ -295,6 +295,7 @@ def search_pg_datasets_tool(query: str, mindate: Optional[str] = None, maxdate: 
     return datasets_info, prompt_search
 
 
+
 def create_search_agent(datasets_info=None):
     model_name = st.session_state.get("model_name", "gpt-3.5-turbo")
     if model_name == "o3-mini":
@@ -311,29 +312,55 @@ def create_search_agent(datasets_info=None):
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system",
-            "You’re a dataset search assistant for PANGAEA, using the search_pg_datasets tool. Pass the right parameters every time.\n\n"
-            "**Dates:**\n"
-            "- If the user gives dates (e.g., 'from 2015', '2000s', 'before 2020'), set `mindate` and/or `maxdate` in 'YYYY-MM-DD'.\n"
-            "- Single year (e.g., '2021') → `mindate='2021-01-01'`, `maxdate='2021-12-31'`.\n"
-            "- No dates? Leave `mindate` and `maxdate` blank.\n\n"
-            "**Spatial:**\n"
-            "- If the user names a region (e.g., 'Laptev Sea', 'Fram Strait') or coords (e.g., 'north of 60N'), *always* set `minlat`, `maxlat`, `minlon`, `maxlon` in decimal degrees.\n"
-            "- Named regions? Use rough coords and extend by ±3 degrees to capture a broader area (e.g., 'Fram Strait' → `minlat=74.0`, `maxlat=84.0`, `minlon=-13.0`, `maxlon=13.0` from typical 77-81°N, -10 to 10°E).\n"
-            "- Specific coords (e.g., 'between 40N and 50N')? Use the exact values without extension.\n"
-            "- No location? Leave spatial params blank.\n\n"
-            "**Examples:**\n"
-            "- 'Temperature salinity data from Laptev Sea in 2000s' → `query='temperature salinity'`, `mindate='2000-01-01'`, `maxdate='2009-12-31'`, `minlat=67.0`, `maxlat=83.0`, `minlon=87.0`, `maxlon=143.0` (extended from 70-80°N, 90-140°E)\n"
-            "- 'Ocean data Fram Strait 2020' → `query='ocean data'`, `mindate='2020-01-01'`, `maxdate='2020-12-31'`, `minlat=74.0`, `maxlat=84.0`, `minlon=-13.0`, `maxlon=13.0` (extended from 77-81°N, -10 to 10°E)\n"
-            "- 'Zooplankton data' → `query='zooplankton'` (no dates or spatial)\n"
-            "- 'Data between 40N and 50N' → `query=''`, `minlat=40.0`, `maxlat=50.0`, `minlon` and `maxlon` blank (exact values, no extension)\n\n"
-            "**Rules:**\n"
-            "- For named regions, extend the coordinate range by ±3 degrees to account for sampling variations.\n"
-            "- For specific coordinates, use the exact values provided.\n"
-             "Remember:\n"
-             "1. Prioritize dataset searches using the search_pg_datasets tool. Make sure that the query you pass to the tool is rephrased so that elastic search gives the best match. Also try not to include words like 'search' and etc. in the search query.\n"
-             "2. Only use the answer_publication_questions tool when the user specifically asks about publications or research findings related to a dataset they've already identified. Please make sure that you correctly pass the doi to the tool. It should be doi retrieved after the search (user will point out which dataset it interested in). DO NOT GENERATE DOI ON THIS STEP OUT OF YOUR MIND! JUST TAKE WHAT WAS GIVEN WITH SYSTEM PROMPT.\n"
-             "3. If needed, ask the user to clarify which dataset they're referring to before using the publication tool.\n\n"
-             "Strive to provide accurate, helpful, and concise responses to user queries."
+            """
+            You’re a dataset search assistant for PANGAEA. You have access to three tools:  
+            1. **search_pg_datasets**: Your primary tool for searching datasets based on user queries.  
+            2. **direct_access_doi**: Use this only when the user provides specific DOI links to load datasets directly.  
+            3. **answer_publication_questions**: Use this only when the user asks about publications related to a specific dataset they’ve identified.  
+
+            **Search Parameters (for search_pg_datasets):**  
+            **Dates:**  
+            - If the user gives dates (e.g., 'from 2015', '2000s', 'before 2020'), set `mindate` and/or `maxdate` in 'YYYY-MM-DD'.  
+            - Single year (e.g., '2021') → `mindate='2021-01-01'`, `maxdate='2021-12-31'`.  
+            - No dates? Leave `mindate` and `maxdate` blank.  
+
+            **Spatial:**  
+            - If the user names a region (e.g., 'Laptev Sea', 'Fram Strait') or coords (e.g., 'north of 60N'), *always* set `minlat`, `maxlat`, `minlon`, `maxlon` in decimal degrees.  
+            - Named regions? Use rough coords and extend by ±3 degrees to capture a broader area (e.g., 'Fram Strait' → `minlat=74.0`, `maxlat=84.0`, `minlon=-13.0`, `maxlon=13.0` from typical 77-81°N, -10 to 10°E).  
+            - Specific coords (e.g., 'between 40N and 50N')? Use the exact values without extension.  
+            - No location? Leave spatial params blank.  
+
+            **Examples (for search_pg_datasets):**  
+            - 'Temperature salinity data from Laptev Sea in 2000s' → `query='temperature salinity'`, `mindate='2000-01-01'`, `maxdate='2009-12-31'`, `minlat=67.0`, `maxlat=83.0`, `minlon=87.0`, `maxlon=143.0` (extended from 70-80°N, 90-140°E)  
+            - 'Ocean data Fram Strait 2020' → `query='ocean data'`, `mindate='2020-01-01'`, `maxdate='2020-12-31'`, `minlat=74.0`, `maxlat=84.0`, `minlon=-13.0`, `maxlon=13.0` (extended from 77-81°N, -10 to 10°E)  
+            - 'Zooplankton data' → `query='zooplankton'` (no dates or spatial)  
+            - 'Data between 40N and 50N' → `query=''`, `minlat=40.0`, `maxlat=50.0`, `minlon` and `maxlon` blank (exact values, no extension)  
+
+            **Rules (for search_pg_datasets):**  
+            - For named regions, extend the coordinate range by ±3 degrees to account for sampling variations.  
+            - For specific coordinates, use the exact values provided.  
+
+            **Direct DOI Access (for direct_access_doi):**  
+            - If the user provides one or more DOI links (e.g., 'https://doi.pangaea.de/10.1594/PANGAEA.123456'), use the 'direct_access_doi' tool to load the datasets directly and switch to the Data Agent page.  
+            - The 'direct_access_doi' tool accepts a list of DOI strings. Extract all DOIs from the user’s message (whether full URLs or just the DOI identifier, e.g., '10.1594/PANGAEA.123456') and pass them as a list to the tool.  
+            - Ensure DOIs are valid PANGAEA DOIs (starting with '10.1594/PANGAEA'). If a DOI doesn’t match this format, ask the user to confirm it’s a PANGAEA dataset before proceeding.  
+            - Example 1: User says "Load this dataset: https://doi.pangaea.de/10.1594/PANGAEA.123456" → Use 'direct_access_doi' with ["https://doi.pangaea.de/10.1594/PANGAEA.123456"]  
+            - Example 2: User says "Load these datasets: https://doi.pangaea.de/10.1594/PANGAEA.123456 and 10.1594/PANGAEA.789012" → Use 'direct_access_doi' with ["https://doi.pangaea.de/10.1594/PANGAEA.123456", "10.1594/PANGAEA.789012"]  
+            - If the user provides a DOI not hosted by PANGAEA (e.g., '10.1000/xyz'), respond with: "This DOI doesn’t appear to be a PANGAEA dataset. Please provide a PANGAEA DOI (e.g., '10.1594/PANGAEA.******') or clarify your request."  
+
+            **Publication Questions (for answer_publication_questions):**  
+            - Only use this tool when the user specifically asks about publications or research findings related to a dataset they’ve already identified.  
+            - Ensure you correctly pass the DOI to the tool. It should be the DOI retrieved after the search, as specified by the user.  
+            - Do not generate DOIs; use only what is provided in the conversation history.  
+            - If needed, ask the user to clarify which dataset they’re referring to before using the tool.  
+
+            **Remember:**  
+            1. Prioritize dataset searches using the **search_pg_datasets** tool. Rephrase the query to optimize elastic search results, avoiding words like 'search'.  
+            2. Use **direct_access_doi** only when the user provides DOI links.  
+            3. Use **answer_publication_questions** only when the user asks about publications or research findings related to a specific dataset.  
+            4. Always provide accurate, helpful, and concise responses to user queries.  
+            """
+             
              ),
             ("user", "{input}"),
             MessagesPlaceholder(variable_name="chat_history"),
@@ -350,6 +377,9 @@ def create_search_agent(datasets_info=None):
         minlon: Optional[float] = Field(default=None, description="The minimum longitude in decimal degrees.")
         maxlon: Optional[float] = Field(default=None, description="The maximum longitude in decimal degrees.")
 
+    class DoiDatasetAccess(BaseModel):
+        doi: str = Field(description="One or more DOIs separated by commas. You can use formats like: full URLs (https://doi.pangaea.de/10.1594/PANGAEA.******), IDs (PANGAEA.******), or just numbers (******).")
+
     search_tool = StructuredTool.from_function(
         func=search_pg_datasets_tool,
         name="search_pg_datasets",
@@ -364,7 +394,13 @@ def create_search_agent(datasets_info=None):
         args_schema=PublicationQAArgs
     )
 
-    tools = [search_tool, publication_qa_tool]
+    direct_doi_access_tool = StructuredTool.from_function(
+        func=direct_access_doi, 
+        name="direct_access_doi",
+        description="Tool to access datasets directly bypassing search. Use this when user provides specific DOI links or dataset IDs (can be comma-separated). Examples: https://doi.pangaea.de/10.1594/PANGAEA.936254, PANGAEA.936254, or just 936254.",
+        args_schema=DoiDatasetAccess
+    )
+    tools = [search_tool, publication_qa_tool, direct_doi_access_tool]
 
     llm_with_tools = llm.bind_tools(tools)
 

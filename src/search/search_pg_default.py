@@ -131,3 +131,159 @@ def pg_search_default(query: str, count: int = 15, from_idx: int = 0, topic: Opt
     df.attrs['total'] = total_hits
     df.attrs['max_score'] = results.get('maxScore', None)
     return df
+
+
+def direct_access_doi(doi: str):
+    """
+    Directly access datasets by DOI without using the search function.
+    
+    Args:
+        doi: One or more DOIs separated by commas
+        
+    Returns:
+        tuple: (datasets_info, prompt_text)
+    """
+    import pandas as pd
+    import logging
+    import streamlit as st
+    import re
+    import pangaeapy.pandataset as pdataset
+    
+    # Parse input to get list of DOIs
+    dois = [d.strip() for d in doi.split(',')]
+    logging.info(f"Processing direct DOI access for: {dois}")
+    
+    # Create a list to store dataset info
+    datasets_list = []
+    
+    for i, curr_doi in enumerate(dois):
+        try:
+            # Normalize DOI format if needed
+            original_doi = curr_doi  # Keep original for reference
+            pangaea_id = None
+            
+            if not curr_doi.startswith(("http://", "https://")):
+                # Check if it's a PANGAEA ID number
+                if re.match(r"^\d+$", curr_doi):
+                    pangaea_id = curr_doi
+                    curr_doi = f"https://doi.pangaea.de/10.1594/PANGAEA.{curr_doi}"
+                # Check if it's a PANGAEA DOI with PANGAEA prefix
+                elif curr_doi.startswith("PANGAEA."):
+                    pangaea_id = curr_doi.split("PANGAEA.")[1]
+                    curr_doi = f"https://doi.pangaea.de/10.1594/{curr_doi}"
+                # Check if it's just the DOI part
+                elif curr_doi.startswith("10.1594/"):
+                    match = re.search(r"PANGAEA\.(\d+)", curr_doi)
+                    pangaea_id = match.group(1) if match else None
+                    curr_doi = f"https://doi.org/{curr_doi}"
+                else:
+                    # Assume it's a PANGAEA ID
+                    pangaea_id = curr_doi
+                    curr_doi = f"https://doi.pangaea.de/10.1594/PANGAEA.{curr_doi}"
+            else:
+                # Extract ID from full URL
+                match = re.search(r"PANGAEA\.(\d+)", curr_doi)
+                pangaea_id = match.group(1) if match else None
+            
+            logging.info(f"Fetching details for DOI: {curr_doi} (ID: {pangaea_id})")
+            
+            # Get dataset details directly
+            try:
+                if pangaea_id and pangaea_id.isdigit():
+                    dataset = pdataset.PanDataSet(id=int(pangaea_id))
+                    dataset.setMetadata()
+                    
+                    # Get title
+                    dataset_title = getattr(dataset, 'title', None) or f"Dataset from DOI: {curr_doi}"
+                    
+                    # Get abstract
+                    abstract = getattr(dataset, 'abstract', "No description available") or "No description available"
+                    
+                    # Get parameters
+                    param_dict = dataset.getParamDict()
+                    short_names = param_dict.get('shortName', [])
+                    parameters = ', '.join(short_names) + "..." if len(short_names) > 10 else ', '.join(short_names)
+                else:
+                    dataset_title = f"Dataset from DOI: {curr_doi}"
+                    abstract = "No description available"
+                    parameters = "No parameters available"
+            except Exception as e:
+                logging.error(f"Error getting dataset details for DOI {curr_doi}: {str(e)}")
+                dataset_title = f"Dataset from DOI: {curr_doi}"
+                abstract = f"Error fetching details: {str(e)}"
+                parameters = "No parameters available due to error"
+            
+            short_description = " ".join(abstract.split()[:100]) + "..." if len(abstract.split()) > 100 else abstract
+            
+            # Add dataset to list
+            datasets_list.append({
+                'Number': i + 1,
+                'Name': dataset_title,
+                'DOI': curr_doi,
+                'DOI Number': curr_doi.split('/')[-1] if '/' in curr_doi else curr_doi,
+                'Description': abstract,
+                'Short Description': short_description,
+                'Score': 1.0,  # Default score
+                'Parameters': parameters,
+                'file_urls': []
+            })
+            
+            logging.info(f"Successfully added DOI to results: {curr_doi} with title: {dataset_title}")
+            
+        except Exception as e:
+            logging.error(f"Error processing DOI {curr_doi}: {str(e)}")
+            # Add error dataset to list
+            datasets_list.append({
+                'Number': i + 1,
+                'Name': f"Error: Could not access DOI: {curr_doi}",
+                'DOI': curr_doi,
+                'DOI Number': curr_doi.split('/')[-1] if '/' in curr_doi else curr_doi,
+                'Description': f"Error: {str(e)}",
+                'Short Description': f"Error: {str(e)}",
+                'Score': 0.0,
+                'Parameters': "No parameters available due to error",
+                'file_urls': []
+            })
+    
+    # Create DataFrame from list
+    datasets_info = pd.DataFrame(datasets_list)
+    
+    # Store in session state
+    st.session_state.datasets_info = datasets_info
+    
+    # Add message to chat
+    st.session_state.messages_search.append({
+        "role": "assistant",
+        "content": f"**Direct access to DOIs:** {', '.join(dois)}"
+    })
+    
+    if not datasets_list:
+        st.session_state.messages_search.append({
+            "role": "assistant",
+            "content": "No valid datasets found from the provided DOIs."
+        })
+        return datasets_info, "No valid datasets found."
+    
+    st.session_state.messages_search.append({
+        "role": "assistant",
+        "content": "**Datasets Information:**",
+        "table": datasets_info.to_json(orient="split")
+    })
+    
+    # Create prompt for the search agent
+    datasets_description = ""
+    for i, row in datasets_info.iterrows():
+        datasets_description += (
+            f"Dataset {i + 1}:\n"
+            f"Name: {row['Name']}\n"
+            f"Description: {row['Short Description']}\n"
+            f"Parameters: {row['Parameters']}\n\n"
+        )
+    
+    prompt_search = (
+        f"The user has directly accessed the following DOIs: {', '.join(dois)}\n"
+        f"Available datasets:\n{datasets_description}\n"
+        "These datasets are now available for selection. You can analyze these datasets to help the user understand their content and potential use."
+    )
+    
+    return datasets_info, prompt_search
