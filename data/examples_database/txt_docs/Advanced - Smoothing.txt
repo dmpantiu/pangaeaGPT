@@ -47,9 +47,9 @@ plt.plot(x, y, 'o',xnew, f2(xnew), '-')
 
 --- Cell 11 ---
 f2.set_smoothing_factor(20000)
-plt.figure(figsize = (12,5))
-plt.plot(x, y, 'o',xnew, f2(xnew), '-')
-
+#plt.figure(figsize = (12,5))
+#plt.plot(x, y, 'o',xnew, f2(xnew), '-')
+plt.savefig(plot_path, dpi=300) #plot_path already defined
 --- Cell 12 ---
 
 

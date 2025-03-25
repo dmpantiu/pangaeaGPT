@@ -27,6 +27,7 @@ from langchain.agents.format_scratchpad.openai_tools import (
 from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
 from langgraph.graph import StateGraph, END
 from langchain.agents.agent_types import AgentType
+from langchain_anthropic import ChatAnthropic
 
 
 from langchain_openai import OpenAIEmbeddings
@@ -730,6 +731,128 @@ list_plotting_data_files_tool = StructuredTool.from_function(
 )
 
 
+def wise_agent(query: str) -> str:
+    """
+    A tool that uses Anthropic's Claude 3.7 Sonnet model to provide visualization advice.
+    
+    Args:
+        query: The query about visualization to send to Claude
+        
+    Returns:
+        str: Claude's advice on visualization
+    """
+    import streamlit as st
+    import logging
+    
+    # Get Anthropic API key from secrets
+    try:
+        anthropic_api_key = st.secrets["general"]["anthropic_api_key"]
+        logging.info("Successfully retrieved Anthropic API key from secrets")
+    except KeyError:
+        logging.error("Anthropic API key not found in .streamlit/secrets.toml")
+        return "Error: Anthropic API key not found in .streamlit/secrets.toml. Please add it to use WISE_AGENT."
+    
+    # Get dataset information from viz_datasets_text in session state (set by create_visualization_agent)
+    datasets_text = st.session_state.get("viz_datasets_text", "")
+    
+    if not datasets_text:
+        # Try to extract dataset info from active datasets if viz_datasets_text not available
+        try:
+            from main import get_datasets_info_for_active_datasets
+            datasets_info = get_datasets_info_for_active_datasets(st.session_state)
+            
+            # Format dataset information
+            datasets_text = ""
+            for i, info in enumerate(datasets_info, 1):
+                datasets_text += (
+                    f"Dataset {i}:\n"
+                    f"Name: {info.get('name', 'Unknown')}\n"
+                    f"DOI: {info.get('doi', 'Not available')}\n"
+                    f"Description: {info.get('description', 'No description available')}\n"
+                    f"Type: {info.get('data_type', 'Unknown type')}\n"
+                    f"Sample Data: {info.get('df_head', 'No sample available')}\n\n"
+                )
+            logging.info("Successfully extracted dataset information from active datasets")
+        except Exception as e:
+            logging.error(f"Error retrieving dataset information: {str(e)}")
+            datasets_text = "No dataset information available"
+    
+    # Get the list of available plotting data files
+    try:
+        available_files = list_plotting_data_files("")
+        logging.info("Successfully retrieved available plotting data files")
+    except Exception as e:
+        logging.error(f"Error retrieving available files: {str(e)}")
+        available_files = f"Error retrieving available files: {str(e)}"
+    
+    # Create the system prompt for Claude
+    system_prompt = """You are WISE_AGENT, a scientific visualization expert specializing in data visualization for research datasets.
+
+Your role is to provide specific, actionable advice on how to create the most effective visualizations for scientific data.
+
+When giving visualization advice:
+0. Provide superb visualizations! That's your life goal! 
+1. ANALYZE THE DATA STRUCTURE first - recommend plot types based on the actual data dimensions and variables
+2. Consider the SCIENTIFIC DOMAIN (oceanography, climate science, biodiversity) and its standard visualization practices
+3. Recommend specific matplotlib/seaborn/plotly code strategies tailored to the data
+4. Suggest appropriate color schemes that follow scientific conventions (e.g., sequential for continuous variables, categorical for discrete)
+5. Provide precise advice on layouts, axes, legends, and annotations
+6. For spatial/geographic data, recommend appropriate projections and map types
+7. For time series, recommend appropriate temporal visualizations
+8. Always prioritize clarity, accuracy, and scientific information density
+
+Your advice should be specifically tailored to the datasets the user is working with. Be concise but thorough in your recommendations.
+"""
+    
+    # Enhance the query with dataset information and available files
+    enhanced_query = f"""
+DATASET INFORMATION:
+{datasets_text}
+
+AVAILABLE PLOTTING DATA FILES:
+{available_files}
+
+USER QUERY:
+{query}
+
+Please provide visualization advice based on this information.
+"""
+    
+    try:
+        # Initialize the ChatAnthropic client with the specified model
+        llm = ChatAnthropic(
+            model="claude-3-7-sonnet-20250219",
+            anthropic_api_key=anthropic_api_key,
+            temperature=0.2,  # Low temperature for more precise advice
+        )
+        
+        logging.info("Making request to Claude 3.7 Sonnet model with enhanced context")
+        
+        # Generate the response with the enhanced query
+        response = llm.invoke(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": enhanced_query}
+            ]
+        )
+        
+        logging.info("Successfully received response from Claude")
+        return response.content
+    except Exception as e:
+        logging.error(f"Error using ChatAnthropic: {str(e)}")
+        return f"Error using WISE_AGENT: {str(e)}"
+
+
+class WiseAgentToolArgs(BaseModel):
+    query: str = Field(description="The query about visualization to send to Claude for advice. Include details about your dataset structure, variables, and visualization goals.")
+
+# Add this structured tool definition
+wise_agent_tool = StructuredTool.from_function(
+    func=wise_agent,
+    name="wise_agent",
+    description="A tool that provides expert visualization advice using Anthropic's Claude 3.7 Sonnet model. Use this tool FIRST when planning complex visualizations or when you need guidance on best visualization practices for scientific data. Provide a detailed description of the data structure and visualization goals.",
+    args_schema=WiseAgentToolArgs
+)
 
 def create_visualization_agent(user_query, datasets_info):
     import os
@@ -858,9 +981,9 @@ def create_visualization_agent(user_query, datasets_info):
         reflect_tool,
         install_package_tool,
         example_visualization_tool,
-        list_plotting_data_files_tool
+        list_plotting_data_files_tool,
+        wise_agent_tool
     ]
-
     # Create the agent with the updated prompt and tools
     from langchain.agents import create_openai_tools_agent
     from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder

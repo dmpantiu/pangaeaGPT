@@ -1,0 +1,90 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+import warnings
+warnings.filterwarnings('ignore')
+
+dataset_1 = ...
+
+# Calculate current speed from U and V components
+dataset_1['Current Speed'] = np.sqrt(dataset_1['Cur vel U']**2 + dataset_1['Cur vel V']**2)
+
+# Convert the Date/Time column to datetime format if it's not already
+if not pd.api.types.is_datetime64_any_dtype(dataset_1['Date/Time']):
+    dataset_1['Date/Time'] = pd.to_datetime(dataset_1['Date/Time'])
+
+# Get unique Gear IDs and sort them
+gear_ids = sorted(dataset_1['Gear ID'].unique())
+
+# Create a single plot for all gear IDs
+plt.figure(figsize=(12, 8))
+
+# Set up color cycle for different gear IDs
+colors = plt.cm.tab10(np.linspace(0, 1, len(gear_ids)))
+
+# Plot speed for each device (Gear ID)
+for i, gear_id in enumerate(gear_ids):
+    # Filter data for this gear ID
+    gear_data = dataset_1[dataset_1['Gear ID'] == gear_id].copy()
+    
+    # Check if we have valid data
+    if gear_data['Current Speed'].isna().all():
+        continue  # Skip this gear ID if no valid data
+    
+    # Calculate daily average speed to simplify the plot
+    gear_data['Day'] = gear_data['Date/Time'].dt.floor('D')
+    daily_avg = gear_data.groupby('Day')['Current Speed'].mean().reset_index()
+    
+    # Plot the speed time series
+    plt.plot(daily_avg['Day'], daily_avg['Current Speed'], 
+             linewidth=2, color=colors[i], label=f'Gear ID: {gear_id}')
+    
+    # Add a marker for maximum speed (with NaN handling)
+    if not daily_avg['Current Speed'].isna().all():
+        # Drop NaN values before finding max
+        valid_data = daily_avg.dropna(subset=['Current Speed'])
+        if not valid_data.empty:
+            max_idx = valid_data['Current Speed'].idxmax()
+            max_date = valid_data.loc[max_idx, 'Day']
+            max_speed = valid_data.loc[max_idx, 'Current Speed']
+            plt.scatter(max_date, max_speed, color=colors[i], s=100, marker='*')
+    
+    # Calculate statistics (handling NaN values)
+    mean_speed = gear_data['Current Speed'].mean()
+    total_max = gear_data['Current Speed'].max()
+    
+    # Find a good position for the text
+    if 'max_date' in locals() and 'max_speed' in locals():
+        # If we successfully found a maximum point, place text near it
+        text_x = max_date
+        text_y = max_speed + 2 + (i * 2)  # Stagger text positions
+    else:
+        # Otherwise, position text near the middle of the x-axis
+        dates = daily_avg['Day'].dropna()
+        if not dates.empty:
+            text_x = dates.iloc[len(dates)//2]
+            text_y = 5 + (i * 2)  # Stagger text positions
+        else:
+            # Skip annotation if no valid data
+            continue
+    
+    plt.annotate(f"Gear {gear_id}: Mean={mean_speed:.1f}, Max={total_max:.1f} cm/s",
+                xy=(text_x, text_y), xytext=(10, 0), textcoords="offset points",
+                fontsize=9, bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.7))
+
+# Add labels and legend
+plt.ylabel('Current Speed (cm/s)')
+plt.title('Current Speed from Each Device of the Mooring')
+plt.grid(True, alpha=0.3)
+plt.legend(loc='best')
+
+# Format the date on x-axis
+plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+plt.gca().xaxis.set_major_locator(mdates.MonthLocator(interval=2))
+plt.xticks(rotation=45)
+
+# Adjust layout and save
+plt.tight_layout()
+plt.savefig(plot_path, dpi=300)
+plt.show()

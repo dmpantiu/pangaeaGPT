@@ -1,0 +1,70 @@
+
+'''
+Dummy dataset example: Dataset shape: (190, 5)
+Dataset first rows:
+    Temperature   Salinity      Depth     Water_Mass      Density
+27    22.571172  35.246491   1.083765  Surface Water  1025.250616
+29    20.232252  35.349223   9.128668  Surface Water  1025.631725
+20    23.059264  35.048734  10.312387  Surface Water  1025.038846
+0     21.872701  34.593103  11.816483  Surface Water  1024.851376
+7     24.330881  35.397110  17.743954  Surface Water  1025.134818
+'''
+
+# Create T-S diagram
+fig, ax = plt.subplots(figsize=(12, 10))
+
+# Define colors for water masses
+water_mass_colors = {
+    'Surface Water': 'red',
+    'Central Water': 'orange',
+    'Intermediate Water': 'green',
+    'Deep Water': 'blue',
+    'Bottom Water': 'purple'
+}
+
+# Plot each water mass
+for mass in dataset_1['Water_Mass'].unique():
+    subset = dataset_1[dataset_1['Water_Mass'] == mass]
+    ax.scatter(subset['Salinity'], subset['Temperature'], 
+              label=mass, color=water_mass_colors[mass],
+              alpha=0.7, s=50, edgecolor='k', linewidth=0.5)
+
+# Add density contours
+salinity_grid = np.linspace(34.5, 36.5, 100)
+temp_grid = np.linspace(-2, 30, 100)
+SS, TT = np.meshgrid(salinity_grid, temp_grid)
+# Simple density formula for illustration
+density = 1028 - 0.13 * TT + 0.75 * (SS - 35)
+
+# Plot density contours
+levels = np.arange(1023, 1030, 0.5)
+cs = ax.contour(SS, TT, density, levels=levels, colors='gray', alpha=0.6, linestyles='--')
+ax.clabel(cs, levels[::2], fontsize=8, fmt='%.1f')
+
+# Set axis labels and title
+ax.set_xlabel('Salinity (PSU)', fontsize=14)
+ax.set_ylabel('Temperature (°C)', fontsize=14)
+ax.set_title('Temperature-Salinity (T-S) Diagram with Water Mass Identification', fontsize=16)
+
+# Add legend
+ax.legend(loc='upper left', fontsize=12)
+
+# Add grid
+ax.grid(True, linestyle=':', alpha=0.7)
+
+# Set axis limits
+ax.set_xlim(34.5, 36.5)
+ax.set_ylim(-2, 30)
+
+# Add annotation explaining the diagram
+ax.text(0.02, 0.02, 
+        "T-S diagrams help identify water masses and mixing processes.\n"
+        "Diagonal lines represent constant density surfaces.\n"
+        "Clustered points indicate distinct water masses.",
+        transform=ax.transAxes, fontsize=10, va='bottom', 
+        bbox=dict(boxstyle="round,pad=0.5", facecolor='white', alpha=0.7))
+
+# Save the plot
+plt.tight_layout()
+plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+print(f"Plot saved successfully using plot_path variable.")

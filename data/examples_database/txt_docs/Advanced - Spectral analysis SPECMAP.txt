@@ -57,7 +57,7 @@ plt.plot(f, power)
 plt.plot(f[peaks], power[peaks], "o") 
 contour_heights = power[peaks] - prominences
 plt.vlines(x=f[peaks], ymin=contour_heights, ymax=power[peaks])
-plt.show()
+plt.savefig(plot_path, dpi=300) #plot_path already defined
 
 --- Cell 11 ---
 To identify the frequency of peaks we simply calculate:

@@ -146,8 +146,7 @@ def clustering_pca(df_div):
         ax.legend(custom_handles, unique_stations, title="Station", loc="best", fontsize=10)
     
     fig.tight_layout()
-    fig.savefig("pca_kmeans_clusters.png", dpi=300)
-    plt.show()
+    fig.savefig(plot_path, dpi=300) #plot_path already defined
 
 def main():
     filepath = "/Users/dmpantiu/PycharmProjects/dev_main_Pangaea/example/HMMV_Z1-Z3_all-habitats_FISH_counts.tab"
