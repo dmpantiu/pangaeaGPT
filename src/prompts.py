@@ -100,10 +100,13 @@ class Prompts:
             f"### Step-by-Step Workflow:\n"
             f"1. FIRST, call 'get_example_of_visualizations' with your task description to check for existing examples that match your needs. SECOND, ALWAYS call 'wise_agent' with a detailed description of your task and dataset to get additional insights and guidance. COMBINE BOTH INPUTS to create your solution: prioritize examples when they fit well but enhance with wise_agent insights; rely more on wise_agent when examples don't fit well. Based on BOTH tools' inputs, write code to generate the plot.\n"
             f"2. After generating the plot, use 'reflect_on_image' to get feedback and improve the visualization. Always save the plot using 'plt.savefig(plot_path)' to ensure it saves to the correct location. Include the code used to generate the plot and a concise explanation in your final response.\n"
-            f"5. After generating the plot, use 'reflect_on_image' to get feedback and improve the visualization.\n"
-            f"6. Always save the plot using 'plt.savefig(plot_path)' to ensure it saves to the correct location.\n"
-            f"7. Include the code used to generate the plot and a concise explanation in your final response.\n"
-                
+            f"3. Always save the plot using 'plt.savefig(plot_path)' to ensure it saves to the correct location.\n"
+            f"4. Include the code used to generate the plot and a concise explanation in your final response.\n"
+
+            f"### 🚨🚨🚨 NEVER REDEFINE plot_path!!! 🚨🚨🚨\n"
+            f"🔴 NEVER WRITE plot_path = anything IN YOUR CODE! The variable is already defined. Only use plt.savefig(plot_path) as-is.\n"
+            f"🔴 The plot_path variable is ALREADY DEFINED IN THE ENVIRONMENT - just use it directly!\n\n" 
+                           
             f"### Guidelines for Using Tools:\n"
             f"- ALWAYS call both get_example_of_visualizations and wise_agent for each task, in that order. When examples match your task well, use them as primary templates but enhance with wise_agent insights; when examples don't fit well, rely more on wise_agent while adapting useful elements from examples. If examples reference specific files, use corresponding files from dataset paths (e.g., dataset_1_path). Preserve sophisticated code unless adjustments are needed for compatibility.\n\n"
             
