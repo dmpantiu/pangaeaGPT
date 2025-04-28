@@ -201,7 +201,11 @@ if st.session_state.current_page == "search":
         "Find datasets about renewable energy sources.",
         "Search for prokaryote abundance data on Hakon Mosby volcano",
         "Global distributions of coccolithophores abundance and biomass",
-        "Shipboard acoustic doppler current profiling during POSEIDON cruise P414 (POS414)"
+        "Shipboard acoustic doppler current profiling during POSEIDON cruise P414 (POS414)", 
+        "Processed data of CTD buoys 2019O1 to 2019O8 MOSAiC", 
+        "Retrieve Physical oceanography and current velocity data from mooring AK6-1; get it directly from 10.1594/PANGAEA.954299",
+        "Get Processed TACE current meter mooring; retireve it directly from 10.1594/PANGAEA.946892",
+        'Download Moored current and temperature measurements in the Faroe Bank Channel; get it using doi: 10.1594/PANGAEA.864110'
     ]
     selected_query = st.selectbox(
         "Select an example or write down your query:",
@@ -489,6 +493,7 @@ elif st.session_state.current_page == "data_agent":
     ensure_memory(st.session_state)
     ensure_thread_id(st.session_state)
     user_input = st.chat_input("Enter your query:")
+    
     if user_input:
         # Store status container reference in session state
         st.session_state.thinking_status = thinking_status
@@ -572,7 +577,9 @@ elif st.session_state.current_page == "data_agent":
                 st.session_state.visualization_agent_used = False
         for info in datasets_info:
             logging.info(f"Displaying dataset in Data Agent: DOI {info['doi']}, type: {info['data_type']}")
-            with st.expander(f"Dataset: {info['doi']}", expanded=False):
+            with st.expander(f"Dataset: {info['name']}", expanded=False):
+                # Add clickable DOI link
+                st.markdown(f"**DOI:** [{info['doi']}]({info['doi']})")
                 st.write(f"**Name:** {info['name']}")
                 st.write(f"**Type:** {info['data_type']}")
                 if info['data_type'] == "pandas DataFrame":
@@ -625,7 +632,9 @@ elif st.session_state.current_page == "data_agent":
                 st.session_state.visualization_agent_used = False
         for info in datasets_info:
             logging.info(f"Displaying dataset in Data Agent: DOI {info['doi']}, type: {info['data_type']}")
-            with st.expander(f"Dataset: {info['doi']}", expanded=False):
+            with st.expander(f"Dataset: {info['name']}", expanded=False):
+                # Add clickable DOI link
+                st.markdown(f"**DOI:** [{info['doi']}]({info['doi']})")
                 st.write(f"**Name:** {info['name']}")
                 st.write(f"**Type:** {info['data_type']}")
                 if info['data_type'] == "pandas DataFrame":

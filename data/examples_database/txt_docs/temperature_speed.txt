@@ -1,0 +1,73 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+
+# Make a copy to avoid modifying the original dataset
+dataset_1 = ...
+
+
+# Assuming the dataset has columns as shown in the sample:
+# Date/Time, Depth water [m], Temp [°C], Cur vel U [cm/s], Cur vel V [cm/s]
+date_col = df.columns[0]  # 'Date/Time'
+temp_col = df.columns[2]  # 'Temp [°C]'
+u_vel_col = df.columns[3]  # 'Cur vel U [cm/s]'
+v_vel_col = df.columns[4]  # 'Cur vel V [cm/s]'
+
+# Calculate speed from velocity components (Pythagorean theorem)
+df['Speed'] = np.sqrt(df[u_vel_col]**2 + df[v_vel_col]**2)
+
+# Convert Date/Time to datetime if not already and set as index
+if not pd.api.types.is_datetime64_any_dtype(df[date_col]):
+    df[date_col] = pd.to_datetime(df[date_col])
+
+if not isinstance(df.index, pd.DatetimeIndex):
+    df = df.set_index(date_col)
+
+# Apply 10-day smoothing
+# For hourly data, 10 days = 240 hours
+window_size = 240  # 10 days * 24 hours
+
+# Apply rolling window for smoothing
+temp_smoothed = df[temp_col].rolling(window=window_size, center=True, min_periods=window_size//2).mean()
+speed_smoothed = df['Speed'].rolling(window=window_size, center=True, min_periods=window_size//2).mean()
+
+# Create plot with dual y-axes
+fig, ax1 = plt.subplots(figsize=(14, 7))
+
+# Plot temperature on the left y-axis
+color = 'tab:red'
+ax1.set_xlabel('Date')
+ax1.set_ylabel('Temperature (°C)', color=color)
+line1 = ax1.plot(temp_smoothed, color=color, linewidth=2, label='Temperature (10-day avg)')
+ax1.tick_params(axis='y', labelcolor=color)
+ax1.grid(True, alpha=0.3)
+
+# Create second y-axis for speed
+ax2 = ax1.twinx()
+color = 'tab:blue'
+ax2.set_ylabel('Current Speed (cm/s)', color=color)
+line2 = ax2.plot(speed_smoothed, color=color, linewidth=2, label='Speed (10-day avg)')
+ax2.tick_params(axis='y', labelcolor=color)
+
+# Format x-axis dates
+ax1.xaxis.set_major_locator(mdates.MonthLocator())
+ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+fig.autofmt_xdate()  # Rotate date labels
+
+# Add legend combining both lines
+lines = line1 + line2
+labels = [l.get_label() for l in lines]
+ax1.legend(lines, labels, loc='best', frameon=True, framealpha=0.7)
+
+# Add title
+plt.title('Faroe Bank Channel: Temperature and Current Speed (10-day smoothed)')
+
+# Display the plot
+fig.tight_layout()
+plt.show()
+
+# Print some statistics about the smoothed data
+print("\nSummary Statistics (10-day smoothed data):")
+print(f"Temperature (°C): Min={temp_smoothed.min():.2f}, Max={temp_smoothed.max():.2f}, Mean={temp_smoothed.mean():.2f}")
+print(f"Current Speed (cm/s): Min={speed_smoothed.min():.2f}, Max={speed_smoothed.max():.2f}, Mean={speed_smoothed.mean():.2f}")

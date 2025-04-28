@@ -10,6 +10,7 @@ except ImportError:
 
 # Get API keys from environment variables or prompt user for input
 openai_api_key = os.environ.get('OPENAI_API_KEY') or input("Please enter your OpenAI API key: ")
+anthropic_api_key = os.environ.get('ANTHROPIC_API_KEY') or input("Please enter your Anthropic API key: ")
 
 # LangChain API key and project name
 langchain_api_key = os.environ.get('LANGCHAIN_API_KEY') or input("Please enter your LangChain API key (optional): ")
@@ -154,6 +155,7 @@ def sanitize_input(input_str):
     return ''.join(c for c in str(input_str) if ord(c) < 128) if input_str else ""
 
 openai_api_key = sanitize_input(openai_api_key)
+anthropic_api_key = sanitize_input(anthropic_api_key)
 langchain_api_key = sanitize_input(langchain_api_key)
 langchain_project_name = sanitize_input(langchain_project_name)
 
@@ -166,6 +168,8 @@ with open(secrets_path, 'w') as f:
     f.write("[general]\n")
     if openai_api_key:
         f.write(f"openai_api_key = \"{openai_api_key}\"\n")
+    if anthropic_api_key:
+        f.write(f"anthropic_api_key = \"{anthropic_api_key}\"\n")
     if langchain_api_key:
         f.write(f"langchain_api_key = \"{langchain_api_key}\"\n")
     if langchain_project_name:

@@ -171,17 +171,7 @@ Usage Notes:
 
 4. Example Usage with Real Data:
 ```python
-# Load your real CTD data
-real_ctd_data = pd.read_csv('your_ctd_data.csv')
-
-# Create plot
-plot_ctd_profiles(
-    real_ctd_data,
-    main_title="CTD Profile - Station XX",
-    pressure_col='your_pressure_column',
-    temperature_col='your_temperature_column',
-    salinity_col='your_salinity_column'
-)
+...
 ```
 
 Note: The dummy data generator creates realistic-looking CTD profiles

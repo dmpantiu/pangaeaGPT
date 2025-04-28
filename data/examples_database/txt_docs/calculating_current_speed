@@ -1,0 +1,54 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.dates import date2num
+
+
+dataset_1 = ...
+# Calculate speed from U and V components
+speed = np.sqrt(dataset_1['Cur vel U']**2 + dataset_1['Cur vel V']**2)
+dataset_1['Speed'] = speed
+
+# Convert Date/Time to numerical format for plotting
+date_time_nums = date2num(pd.to_datetime(dataset_1['Date/Time']))
+
+# Prepare grid for contour plot
+X_unique = np.unique(date_time_nums)
+Y_unique = np.unique(dataset_1['Depth water'])
+X, Y = np.meshgrid(X_unique, Y_unique)
+
+# Create an empty grid for speed values
+Z = np.empty(X.shape)
+
+# Populate the grid with speed values
+for xi, x in enumerate(X_unique):
+    for yi, y in enumerate(Y_unique):
+        # Find the closest (x, y) in the dataset_1 and get the corresponding speed
+        # This assumes that the dataset_1 is already sorted by Date/Time and Depth
+        mask = (date_time_nums == x) & (dataset_1['Depth water'] == y)
+        if any(mask):
+            Z[yi, xi] = dataset_1['Speed'][mask].values[0]
+        else:
+            Z[yi, xi] = np.nan  # Handle any missing data points
+
+# Plotting
+plt.figure(figsize=(14, 6))
+
+# Create contourf plot
+contour = plt.contourf(X, Y, Z, cmap='viridis', levels=100)
+cbar = plt.colorbar(contour)
+cbar.set_label('Speed (cm/s)')
+
+# Set axis labels and title
+plt.xlabel('Date/Time')
+plt.ylabel('Depth Water (m)')
+plt.title('Contour Plot of Speed over Time and Depth')
+
+# Invert y-axis
+plt.gca().invert_yaxis()
+
+# Set x-axis to display dates
+plt.gca().xaxis_date()
+plt.show()
+# Save the plot
+plt.savefig(plot_path) 

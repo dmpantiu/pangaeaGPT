@@ -1,0 +1,115 @@
+'''
+Dummy dataset example (do not use it, use what you have in your loaded environment, dataset_1 and etc.)
+Dataset shape: (400, 5)
+
+Dataset first rows:
+       Depth  Temperature   Salinity  Season      Density
+0   0.000000    27.456510  34.478580  Summer  1024.039589
+1   5.050505    26.725055  34.388674  Summer  1024.067249
+2  10.101010    26.502764  34.392602  Summer  1024.099092
+3  15.151515    26.228979  34.473351  Summer  1024.195246
+4  20.202020    26.922741  34.417357  Summer  1024.063061
+'''
+
+# Create multi-panel plot with thermocline highlighting
+fig = plt.figure(figsize=(16, 10))
+gs = GridSpec(1, 3, width_ratios=[1, 1, 1.2])
+
+# Define colors for seasons
+season_colors = {
+    'Summer': 'red',
+    'Winter': 'blue',
+    'Fall': 'orange',
+    'Spring': 'green'
+}
+
+# Plot 1: Temperature profiles
+ax1 = plt.subplot(gs[0])
+for season in seasons:
+    subset = dataset_1[dataset_1['Season'] == season]
+    ax1.plot(subset['Temperature'], subset['Depth'], 
+             label=season, color=season_colors[season], 
+             linewidth=2.5, alpha=0.8)
+
+# Highlight the thermocline region
+thermocline_min = thermocline_depth - thermocline_thickness/2
+thermocline_max = thermocline_depth + thermocline_thickness/2
+ax1.axhspan(thermocline_min, thermocline_max, color='yellow', alpha=0.2, zorder=0)
+ax1.text(dataset_1['Temperature'].min()+1, thermocline_depth, 
+         'Thermocline', fontsize=12, ha='left', va='center',
+         bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
+
+# Configure temperature plot
+ax1.set_ylabel('Depth (m)', fontsize=14, fontweight='bold')
+ax1.set_xlabel('Temperature (°C)', fontsize=14, fontweight='bold')
+ax1.set_title('Temperature Profiles', fontsize=16, fontweight='bold')
+ax1.invert_yaxis()  # Depth increases downward
+ax1.grid(True, linestyle='--', alpha=0.7)
+ax1.set_xlim(dataset_1['Temperature'].min()-1, dataset_1['Temperature'].max()+1)
+
+# Plot 2: Salinity profiles
+ax2 = plt.subplot(gs[1], sharey=ax1)
+for season in seasons:
+    subset = dataset_1[dataset_1['Season'] == season]
+    ax2.plot(subset['Salinity'], subset['Depth'], 
+             label=season, color=season_colors[season], 
+             linewidth=2.5, alpha=0.8)
+
+# Configure salinity plot
+ax2.set_xlabel('Salinity (PSU)', fontsize=14, fontweight='bold')
+ax2.set_title('Salinity Profiles', fontsize=16, fontweight='bold')
+ax2.grid(True, linestyle='--', alpha=0.7)
+ax2.set_xlim(dataset_1['Salinity'].min()-0.1, dataset_1['Salinity'].max()+0.1)
+plt.setp(ax2.get_yticklabels(), visible=False)  # Hide y-tick labels
+
+# Plot 3: Combined T-S diagram
+ax3 = plt.subplot(gs[2])
+for season in seasons:
+    subset = dataset_1[dataset_1['Season'] == season]
+    scatter = ax3.scatter(subset['Salinity'], subset['Temperature'], 
+                         c=subset['Depth'], cmap='viridis', 
+                         label=season, alpha=0.7, s=30, edgecolor='k', linewidth=0.5)
+
+# Add density contours to T-S diagram
+salinity_grid = np.linspace(dataset_1['Salinity'].min()-0.2, dataset_1['Salinity'].max()+0.2, 100)
+temp_grid = np.linspace(dataset_1['Temperature'].min()-2, dataset_1['Temperature'].max()+2, 100)
+SS, TT = np.meshgrid(salinity_grid, temp_grid)
+# Simple density formula for illustration
+density = 1028 - 0.13 * TT + 0.75 * (SS - 35)
+
+# Plot density contours
+levels = np.linspace(density.min(), density.max(), 10)
+cs = ax3.contour(SS, TT, density, levels=levels, colors='gray', alpha=0.6, linestyles='--')
+ax3.clabel(cs, fontsize=8, fmt='%.1f')
+
+# Configure T-S diagram
+ax3.set_xlabel('Salinity (PSU)', fontsize=14, fontweight='bold')
+ax3.set_ylabel('Temperature (°C)', fontsize=14, fontweight='bold')
+ax3.set_title('T-S Diagram with Seasonal Variation', fontsize=16, fontweight='bold')
+ax3.grid(True, linestyle=':', alpha=0.7)
+
+# Add colorbar for depth
+cbar = plt.colorbar(scatter, ax=ax3, pad=0.01)
+cbar.set_label('Depth (m)', fontsize=12, fontweight='bold')
+
+# Add single legend for all plots
+lines, labels = ax1.get_legend_handles_labels()
+fig.legend(lines, labels, loc='upper center', bbox_to_anchor=(0.5, 0.03),
+          frameon=True, ncol=4, fontsize=12)
+
+# Add overall title
+fig.suptitle('Multi-Depth Temperature & Salinity Profiles with Thermocline Highlighting', 
+            fontsize=20, fontweight='bold', y=0.98)
+
+# Add annotation
+fig.text(0.5, 0.07, 
+        "Seasonal variations in temperature and salinity profiles show the changing structure of the water column.\n"
+        "The thermocline (yellow band) is a region of rapid temperature change with depth.",
+        ha='center', fontsize=12, bbox=dict(facecolor='white', alpha=0.7, boxstyle='round,pad=0.5'))
+
+# Adjust layout
+plt.tight_layout(rect=[0, 0.1, 1, 0.95])
+
+# Save the plot
+plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+print(f"Plot saved successfully using plot_path variable.")

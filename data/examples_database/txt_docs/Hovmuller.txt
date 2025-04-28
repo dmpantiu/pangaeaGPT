@@ -1,0 +1,64 @@
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+import matplotlib.dates as mdates
+
+# Load the dataset
+#dataset_1 = ... #datasets are already loaded
+
+# Calculate velocity speed
+dataset_1['Velocity Speed'] = np.sqrt(dataset_1['Cur vel U']**2 + dataset_1['Cur vel V']**2)
+
+# Convert 'Date/Time' to datetime
+dataset_1['Date/Time'] = pd.to_datetime(dataset_1['Date/Time'])
+
+# Create pivot table
+hovmuller_data = dataset_1.pivot_table(index='Date/Time', columns='Depth water', values='Velocity Speed')
+
+# Start plotting with a larger figure for impact
+fig, ax = plt.subplots(figsize=(14, 8))
+
+# Prepare data for contour plot
+time = mdates.date2num(hovmuller_data.index.to_pydatetime())
+depths = hovmuller_data.columns
+velocity_speeds = hovmuller_data.transpose().fillna(0)
+
+# Define contour levels for smoother gradients
+vel_max = velocity_speeds.quantile(0.90).max()
+levels = np.linspace(0, vel_max, 25)
+
+# Create a vibrant contour plot
+pcm = ax.contourf(time, depths, velocity_speeds, levels=levels, cmap='RdYlBu_r', extend='both')
+
+# Add contour lines for extra definition (optional, uncomment if desired)
+# contours = ax.contour(time, depths, velocity_speeds, levels=levels, colors='black', linewidths=0.5, alpha=0.3)
+
+# Format x-axis with dates
+ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+fig.autofmt_xdate(rotation=45)
+
+# Add a sleek color bar
+cbar = plt.colorbar(pcm, ax=ax, orientation='vertical', pad=0.02, aspect=30)
+cbar.set_label('Velocity Speed (cm/s)', fontsize=12, weight='bold')
+
+# Enhance labels and title with style
+ax.set_title('Hovmüller Plot of Ocean Current Velocities', fontsize=18, weight='bold', pad=15)
+ax.set_xlabel('Time', fontsize=14, weight='bold')
+ax.set_ylabel('Depth (m)', fontsize=14, weight='bold')
+
+# Add grid lines for readability
+ax.grid(True, which='both', linestyle='--', linewidth=0.5, color='gray', alpha=0.7)
+
+# Invert y-axis (depth increases downward)
+ax.invert_yaxis()
+
+# Customize tick sizes
+ax.tick_params(axis='both', which='major', labelsize=12)
+
+# Optimize layout and display
+plt.tight_layout()
+plt.show()
+
+# Optional: Save with high resolution
+# plt.savefig('plot_path', dpi=300, bbox_inches='tight') #Always save with plot_path varaible! 
