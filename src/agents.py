@@ -56,7 +56,7 @@ if parent_dir not in sys.path:
 from .search.search_pg_default import pg_search_default, direct_access_doi
 from .search.publication_qa_tool import answer_publication_questions, PublicationQAArgs
 from .prompts import Prompts
-from .utils import generate_unique_image_path, escape_curly_braces
+from .utils import generate_unique_image_path, escape_curly_braces, log_history_event
 from .config import API_KEY
 
 
@@ -314,10 +314,10 @@ def create_search_agent(datasets_info=None):
         [
             ("system",
             """
-            You’re a dataset search assistant for PANGAEA. You have access to three tools:  
+            You're a dataset search assistant for PANGAEA. You have access to three tools:  
             1. **search_pg_datasets**: Your primary tool for searching datasets based on user queries.  
             2. **direct_access_doi**: Use this only when the user provides specific DOI links to load datasets directly.  
-            3. **answer_publication_questions**: Use this only when the user asks about publications related to a specific dataset they’ve identified.  
+            3. **answer_publication_questions**: Use this only when the user asks about publications related to a specific dataset they've identified.  
 
             **Search Parameters (for search_pg_datasets):**  
             **Dates:**  
@@ -343,17 +343,17 @@ def create_search_agent(datasets_info=None):
 
             **Direct DOI Access (for direct_access_doi):**  
             - If the user provides one or more DOI links (e.g., 'https://doi.pangaea.de/10.1594/PANGAEA.123456'), use the 'direct_access_doi' tool to load the datasets directly and switch to the Data Agent page.  
-            - The 'direct_access_doi' tool accepts a list of DOI strings. Extract all DOIs from the user’s message (whether full URLs or just the DOI identifier, e.g., '10.1594/PANGAEA.123456') and pass them as a list to the tool.  
-            - Ensure DOIs are valid PANGAEA DOIs (starting with '10.1594/PANGAEA'). If a DOI doesn’t match this format, ask the user to confirm it’s a PANGAEA dataset before proceeding.  
+            - The 'direct_access_doi' tool accepts a list of DOI strings. Extract all DOIs from the user's message (whether full URLs or just the DOI identifier, e.g., '10.1594/PANGAEA.123456') and pass them as a list to the tool.  
+            - Ensure DOIs are valid PANGAEA DOIs (starting with '10.1594/PANGAEA'). If a DOI doesn't match this format, ask the user to confirm it's a PANGAEA dataset before proceeding.  
             - Example 1: User says "Load this dataset: https://doi.pangaea.de/10.1594/PANGAEA.123456" → Use 'direct_access_doi' with ["https://doi.pangaea.de/10.1594/PANGAEA.123456"]  
             - Example 2: User says "Load these datasets: https://doi.pangaea.de/10.1594/PANGAEA.123456 and 10.1594/PANGAEA.789012" → Use 'direct_access_doi' with ["https://doi.pangaea.de/10.1594/PANGAEA.123456", "10.1594/PANGAEA.789012"]  
-            - If the user provides a DOI not hosted by PANGAEA (e.g., '10.1000/xyz'), respond with: "This DOI doesn’t appear to be a PANGAEA dataset. Please provide a PANGAEA DOI (e.g., '10.1594/PANGAEA.******') or clarify your request."  
+            - If the user provides a DOI not hosted by PANGAEA (e.g., '10.1000/xyz'), respond with: "This DOI doesn't appear to be a PANGAEA dataset. Please provide a PANGAEA DOI (e.g., '10.1594/PANGAEA.******') or clarify your request."  
 
             **Publication Questions (for answer_publication_questions):**  
-            - Only use this tool when the user specifically asks about publications or research findings related to a dataset they’ve already identified.  
+            - Only use this tool when the user specifically asks about publications or research findings related to a dataset they've already identified.  
             - Ensure you correctly pass the DOI to the tool. It should be the DOI retrieved after the search, as specified by the user.  
             - Do not generate DOIs; use only what is provided in the conversation history.  
-            - If needed, ask the user to clarify which dataset they’re referring to before using the tool.  
+            - If needed, ask the user to clarify which dataset they're referring to before using the tool.  
 
             **Remember:**  
             1. Prioritize dataset searches using the **search_pg_datasets** tool. Rephrase the query to optimize elastic search results, avoiding words like 'search'.  
@@ -1042,20 +1042,13 @@ def agent_node(state, agent, name):
     import time
     import os
     logging.info(f"Entering agent_node for {name}")
-    from src.utils import log_history_event, update_thinking_log
     
     # Generate unique IDs for this agent execution
     agent_id = str(uuid.uuid4())
     agent_start_time = time.time()
     
     # Add thinking log entry for agent start
-    update_thinking_log(
-        st.session_state, 
-        f"Starting processing with {name}", 
-        agent_name=name,
-        step_id=agent_id,
-        start_time=agent_start_time
-    )
+    logging.info(f"Starting processing with {name}")
     st.session_state.processing = True
     
     if 'agent_scratchpad' not in state or not isinstance(state['agent_scratchpad'], list):
@@ -1086,14 +1079,7 @@ def agent_node(state, agent, name):
 
     # Log that the agent is thinking
     thinking_id = str(uuid.uuid4())
-    update_thinking_log(
-        st.session_state, 
-        "Thinking...", 
-        agent_name=name,
-        parent_id=agent_id,
-        step_id=thinking_id,
-        start_time=time.time()
-    )
+    logging.info(f"Thinking... for {name}")
     
     # Invoke the agent
     # Add a placeholder for 'file' if the agent is VisualizationAgent
@@ -1104,15 +1090,7 @@ def agent_node(state, agent, name):
     llm_end_time = time.time()
     
     # Log thinking completion
-    update_thinking_log(
-        st.session_state, 
-        "Completed thinking", 
-        agent_name=name,
-        parent_id=agent_id,
-        step_id=thinking_id,
-        start_time=llm_start_time,
-        end_time=llm_end_time
-    )
+    logging.info(f"Completed thinking for {name}")
     
     last_message_content = result.get("output", "")
     intermediate_steps = result.get("intermediate_steps", [])
@@ -1139,14 +1117,7 @@ def agent_node(state, agent, name):
         if len(input_summary) > 100:
             input_summary = input_summary[:100] + "..."
             
-        update_thinking_log(
-            st.session_state,
-            f"Input: {input_summary}",
-            tool_name=tool_name,
-            parent_id=agent_id,
-            step_id=tool_id,
-            start_time=tool_start_time
-        )
+        logging.info(f"Input: {input_summary} for {tool_name}")
         
         # Summarize the observation for the thinking log
         obs_summary = str(observation)
@@ -1156,15 +1127,7 @@ def agent_node(state, agent, name):
         # Add small delay to simulate execution time
         tool_end_time = time.time()
         
-        update_thinking_log(
-            st.session_state,
-            f"Result: {obs_summary}",
-            tool_name=tool_name,
-            parent_id=tool_id,  # Make this a child of the tool input
-            step_id=str(uuid.uuid4()),
-            start_time=tool_start_time,
-            end_time=tool_end_time
-        )
+        logging.info(f"Result: {obs_summary} for {tool_name}")
         
         log_history_event(
             st.session_state,
@@ -1188,47 +1151,18 @@ def agent_node(state, agent, name):
                 install_id = str(uuid.uuid4())
                 install_start = time.time()
                 
-                update_thinking_log(
-                    st.session_state, 
-                    f"Installing missing module: {missing_module}", 
-                    agent_name=name,
-                    parent_id=agent_id,
-                    step_id=install_id,
-                    start_time=install_start
-                )
+                logging.info(f"Installing missing module: {missing_module}")
                 
                 install_result = install_package_tool.run({"package_name": missing_module})
                 install_end = time.time()
                 
-                update_thinking_log(
-                    st.session_state, 
-                    f"Install result: {install_result}", 
-                    agent_name=name,
-                    parent_id=install_id,
-                    step_id=str(uuid.uuid4()),
-                    start_time=install_start,
-                    end_time=install_end
-                )
-                
-                logging.info(f"Install package result: {install_result}")
+                logging.info(f"Install result: {install_result}")
                 if "successfully" in install_result:
-                    update_thinking_log(
-                        st.session_state, 
-                        f"Successfully installed {missing_module}, retrying", 
-                        agent_name=name,
-                        parent_id=agent_id,
-                        step_id=str(uuid.uuid4())
-                    )
+                    logging.info(f"Successfully installed {missing_module}, retrying")
                     retry_result = agent.invoke(state)
                     last_message_content = retry_result.get("output", "")
                 else:
-                    update_thinking_log(
-                        st.session_state, 
-                        f"Failed to install {missing_module}", 
-                        agent_name=name,
-                        parent_id=agent_id,
-                        step_id=str(uuid.uuid4())
-                    )
+                    logging.info(f"Failed to install {missing_module}")
                     last_message_content = f"Failed to install the missing package '{missing_module}'. Please install it manually."
 
     # Handle plot generation - UPDATED SECTION FOR FIXING FIGURE SAVING/DISPLAY
@@ -1241,15 +1175,7 @@ def agent_node(state, agent, name):
         plot_time = time.time()
         
         # Create a log for the plot generation
-        update_thinking_log(
-            st.session_state, 
-            f"Generated plot: {os.path.basename(new_plot_path)}", 
-            agent_name=name,
-            parent_id=agent_id,
-            step_id=plot_id,
-            start_time=plot_time,
-            end_time=time.time()
-        )
+        logging.info(f"Generated plot: {os.path.basename(new_plot_path)}")
         
         # Ensure the plot is added to the state's plot_images if not already there
         if new_plot_path not in state["plot_images"]:
@@ -1306,14 +1232,7 @@ def agent_node(state, agent, name):
     
     # Add completion note to thinking log
     agent_end_time = time.time()
-    update_thinking_log(
-        st.session_state, 
-        f"Completed processing with {name}", 
-        agent_name=name,
-        step_id=agent_id,
-        start_time=agent_start_time,
-        end_time=agent_end_time
-    )
+    logging.info(f"Completed processing with {name}")
     
     logging.info(f"Completed agent_node for {name}")
     return state

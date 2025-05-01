@@ -248,29 +248,13 @@ def get_datasets_info_for_active_datasets(session_data: dict):
     return datasets_info
 
 
-def create_and_invoke_supervisor_agent(user_query: str, datasets_info: list, memory, session_data: dict):
-    from src.utils import update_thinking_log
+def create_and_invoke_supervisor_agent(user_query: str, datasets_info: list, memory, session_data: dict, st_callback=None):
     import time
     import uuid
+    import logging
+    import traceback
     
-    # Store the thinking_status container for updates
-    if "thinking_status" in st.session_state:
-        session_data["thinking_status"] = st.session_state.thinking_status
-    
-    # Clear previous thinking log
-    session_data["thinking_log"] = []
     session_data["processing"] = True
-    
-    supervisor_id = str(uuid.uuid4())
-    supervisor_start = time.time()
-    
-    update_thinking_log(
-        session_data, 
-        "Initializing supervisor agent with your query", 
-        agent_name="Supervisor",
-        step_id=supervisor_id,
-        start_time=supervisor_start
-    )
     
     # Prepare dataset_globals with sandbox paths
     dataset_globals = {}
@@ -283,28 +267,10 @@ def create_and_invoke_supervisor_agent(user_query: str, datasets_info: list, mem
         elif info['data_type'] == "pandas DataFrame":
             dataset_globals[var_name] = info['dataset']
     
-    graph_create_start = time.time()
     graph = create_supervisor_agent(user_query, datasets_info, memory)
-    graph_create_end = time.time()
-    
-    update_thinking_log(
-        session_data, 
-        "Created agent graph", 
-        agent_name="Supervisor",
-        parent_id=supervisor_id,
-        step_id=str(uuid.uuid4()),
-        start_time=graph_create_start,
-        end_time=graph_create_end
-    )
     
     if graph is None:
         session_data["processing"] = False
-        update_thinking_log(
-            session_data, 
-            "Failed to create graph", 
-            agent_name="Supervisor",
-            parent_id=supervisor_id
-        )
         return None
 
     messages = []
@@ -327,41 +293,22 @@ def create_and_invoke_supervisor_agent(user_query: str, datasets_info: list, mem
         "plan": []  # Added plan to initial state
     }
 
-    config = {"configurable": {"thread_id": session_data.get('thread_id', str(uuid.uuid4())), "recursion_limit": 5}}
+    config = {
+        "configurable": {"thread_id": session_data.get('thread_id', str(uuid.uuid4())), "recursion_limit": 5}
+    }
+    if st_callback:
+        config["callbacks"] = [st_callback]
+        logging.info("StreamlitCallbackHandler added to config.")
+    else:
+        logging.info("No StreamlitCallbackHandler provided.")
 
-    update_thinking_log(
-        session_data, 
-        "Invoking supervisor agent", 
-        agent_name="Supervisor",
-        parent_id=supervisor_id
-    )
-    
-    invoke_start = time.time()
     try:
         response = graph.invoke(initial_state, config=config)
-        invoke_end = time.time()
-        
         session_data["processing"] = False
-        update_thinking_log(
-            session_data, 
-            "Processing complete", 
-            agent_name="Supervisor",
-            step_id=supervisor_id,
-            start_time=supervisor_start,
-            end_time=invoke_end
-        )
         return response
     except Exception as e:
-        invoke_end = time.time()
         session_data["processing"] = False
-        update_thinking_log(
-            session_data, 
-            f"Error occurred: {str(e)}", 
-            agent_name="Supervisor",
-            step_id=supervisor_id,
-            start_time=supervisor_start,
-            end_time=invoke_end
-        )
+        logging.error(f"Error during graph invocation: {e}", exc_info=True)
         raise e
 
 
