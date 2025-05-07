@@ -583,19 +583,27 @@ elif st.session_state.current_page == "data_agent":
                 st.write(f"**Type:** {info['data_type']}")
                 if info['data_type'] == "pandas DataFrame":
                     st.dataframe(info['dataset'])
+                    if 'files' in info:
+                        st.write(f"**Files:** {', '.join(info['files'])}")
                     logging.info(f"Displayed DataFrame for DOI {info['doi']}")
                 elif info['data_type'] == "xarray Dataset":
-                    st.write(info['dataset'])  # Display string representation
                     st.write("**Variables:**")
                     st.write(list(info['dataset'].data_vars))
                     st.write("**Attributes:**")
                     st.write(info['dataset'].attrs)
+                    if 'files' in info:
+                        st.write(f"**Files:** {', '.join(info['files'])}")
                     logging.info(f"Displayed xarray Dataset for DOI {info['doi']}")
-                elif info['data_type'] == "file folder":
-                    st.write(f"Files in folder: {info['df_head']}")
-                    logging.info(f"Displayed file folder for DOI {info['doi']}")
+                elif info['data_type'] == "file folder" or info['data_type'] == "other":
+                    if 'files' in info:
+                        st.write(f"**Files:** {', '.join(info['files'])}")
+                    else:
+                        st.write(info['df_head'])
+                    logging.info(f"Displayed {info['data_type']} for DOI {info['doi']}")
                 else:
                     st.write("Unsupported data type")
+                    if 'files' in info:
+                        st.write(f"**Files:** {', '.join(info['files'])}")
                     logging.warning(f"Unsupported data type displayed for DOI {info['doi']}")
         if has_new_plot(st.session_state):
             reset_new_plot_flag(st.session_state)

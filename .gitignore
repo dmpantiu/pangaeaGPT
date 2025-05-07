@@ -38,3 +38,4 @@ tmp/sandbox/
 
 #Ignore plotting_dat
 data/plotting_data
+data/publication_database/

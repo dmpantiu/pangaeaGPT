@@ -864,10 +864,36 @@ def create_visualization_agent(user_query, datasets_info):
     dataset_variables = []
     datasets = {}
     
+    # Extract the main UUID directory (parent directory of first dataset's sandbox path)
+    # This is the common parent directory all datasets are stored in
+    uuid_main_dir = None
+    for i, info in enumerate(datasets_info):
+        if isinstance(info.get('dataset'), str) and os.path.isdir(info.get('dataset')):
+            # Get the parent directory (UUID directory)
+            uuid_main_dir = os.path.dirname(os.path.abspath(info.get('dataset')))
+            break
+    
+    # List all files in the main UUID directory for reference
+    uuid_dir_files = []
+    if uuid_main_dir and os.path.exists(uuid_main_dir):
+        try:
+            uuid_dir_files = os.listdir(uuid_main_dir)
+        except Exception as e:
+            logging.error(f"Error listing UUID directory files: {str(e)}")
+    
+    # Add the UUID directory to the datasets dict so it can be accessed
+    datasets["uuid_main_dir"] = uuid_main_dir
+    
     # Create a section with crystal clear path instructions
     uuid_paths = "### ⚠️ CRITICAL: EXACT DATASET PATHS - MUST USE THESE EXACTLY AS SHOWN ⚠️\n"
     uuid_paths += "The following paths contain unique IDs that MUST be used with os.path.join():\n\n"
     
+    # Add the main UUID directory first
+    if uuid_main_dir:
+        uuid_paths += f"# MAIN OUTPUT DIRECTORY - SAVE RESULTS HERE:\n"
+        uuid_paths += f"uuid_main_dir = r'{uuid_main_dir}'\n\n"
+        uuid_paths += f"# Files currently in main directory: {', '.join(uuid_dir_files) if uuid_dir_files else 'None'}\n\n"
+         
     # First list all datasets with their paths
     for i, info in enumerate(datasets_info):
         var_name = f"dataset_{i + 1}"

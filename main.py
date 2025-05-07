@@ -194,10 +194,11 @@ def get_datasets_info_for_active_datasets(session_data: dict):
                         logging.info(f"DOI {doi}: Loaded data.csv as DataFrame")
                     except Exception as e:
                         logging.error(f"Failed to load data.csv for DOI {doi}: {e}")
+                        file_list = ", ".join(files)
                         info.update({
-                            'df_head': f"Error loading data.csv: {str(e)}",
+                            'df_head': f"Files: {file_list}",
                             'dataset': dataset_path,
-                            'data_type': "sandbox (error)",
+                            'data_type': "other",
                             'sandbox_path': dataset_path,
                             'files': files
                         })
@@ -216,10 +217,11 @@ def get_datasets_info_for_active_datasets(session_data: dict):
                         logging.info(f"DOI {doi}: Loaded {nc_file} as xarray Dataset")
                     except Exception as e:
                         logging.error(f"Failed to load netCDF for DOI {doi}: {e}")
+                        file_list = ", ".join(files)
                         info.update({
-                            'df_head': f"Error loading netCDF: {str(e)}",
+                            'df_head': f"Files: {file_list}",
                             'dataset': dataset_path,
-                            'data_type': "sandbox (error)",
+                            'data_type': "other",  # Changed type to "other"
                             'sandbox_path': dataset_path,
                             'files': files
                         })
