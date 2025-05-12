@@ -1,15 +1,15 @@
 class Prompts:
     @staticmethod
     def generate_system_prompt_search(user_query, datasets_info):
-        # This prompt is already well-written and professional - no changes needed
         datasets_description = ""
-        for i, row in datasets_info.iterrows():
-            datasets_description += (
-                f"Dataset {i + 1}:\n"
-                f"Name: {row['Name']}\n"
-                f"Description: {row['Short Description']}\n"
-                f"Parameters: {row['Parameters']}\n\n"
-            )
+        if datasets_info is not None:
+            for i, row in datasets_info.iterrows():
+                datasets_description += (
+                    f"Dataset {i + 1}:\n"
+                    f"Name: {row['Name']}\n"
+                    f"Description: {row['Short Description']}\n"
+                    f"Parameters: {row['Parameters']}\n\n"
+                )
         prompt = (
             f"The user has provided the following query: {user_query}\n"
             f"Available datasets:\n{datasets_description}\n"
@@ -62,7 +62,7 @@ class Prompts:
             f"import os\n"
             f"print(f\"Files in dataset_1:\")\n"
             f"for file in os.listdir(dataset_1_path):\n"
-            f"    print(f\"  - {{file}}\")\n"
+            f"    print(f\"  - {{{{file}}}} \")\n"  # QUADRUPLE BRACES
             f"```\n"
             f"4. Then use the exact path to access specific files.\n"
             f"5. Never assume file locations or names - always verify first.\n\n"
@@ -73,7 +73,7 @@ class Prompts:
             f"import os\n"
             f"print(f\"Files in dataset_1:\")\n"
             f"for file in os.listdir(dataset_1_path):\n"
-            f"    print(f\"  - {{file}}\")\n\n"
+            f"    print(f\"  - {{{{file}}}} \")\n\n"  # QUADRUPLE BRACES
             f"# Example 2: Load CSV data correctly\n"
             f"import pandas as pd\n"
             f"csv_path = os.path.join(dataset_1_path, 'data.csv')\n"
@@ -93,9 +93,13 @@ class Prompts:
             f"1. **get_example_of_visualizations**: 🌟 CALL THIS FIRST 🌟 - Call this tool with your task description to retrieve relevant example visualization code. When a good example is found that fits your query well, it should be your primary guide for implementation, but always enhance it with insights from wise_agent. If examples don't match your needs well, get what you can from them and rely more on wise_agent's guidance.\n"
             f"2. **wise_agent**: 🌟 CALL THIS SECOND 🌟 - An important advisor that provides additional guidance and context. Always consult this tool after checking examples, regardless of example quality, to get complementary insights that will enhance your implementation approach. The combination of both tools provides the most robust solution.\n"
             f"3. **Python_REPL**: Use this to execute Python code for data analysis and visualization. Most packages (pandas, xarray, matplotlib.pyplot, os) are available.\n"
+                f"   - **IMPORTANT for Multi-Step Operations**: If you load data (e.g., from `retrieve_era5_data` or a file) and then need to use that loaded data for plotting or further analysis in the *same logical step*, perform ALL these operations (load, process, plot) within a SINGLE Python_REPL code block. The Python environment resets between separate Python_REPL calls, so variables defined in one call are not available in the next unless re-established.\n"
+                f"   - For example, if you retrieve ERA5 data, open it, and plot it, all three actions (the tool call for retrieval, then the `xr.open_zarr`, then `plt.plot`) should be part of the thought process leading to one comprehensive Python_REPL script if the plotting depends directly on the freshly loaded data.\n"
             f"4. **reflect_on_image**: Use this after 'Python_REPL' has generated a plot (max 2 calls) to get feedback and improve the plot.\n"
             f"5. **install_package**: (USE ONLY IN RARE CASES) AND only if 'Python_REPL' reports a missing package. Do not call it preemptively.\n"
             f"6. **list_plotting_data_files**: Lists all files under data/plotting_data directory, useful for plotting resources.\n"
+                f"**TIP**: Always use `list_plotting_data_files(\"\")` to see ALL available files including ERA5 climate data. This shows the complete file paths you can use directly.\n\n"
+            f"7. **retrieve_era5_data**: Retrieves simulated ERA5-like climate data. Use this tool when you need global weather or climate data (e.g., temperature, precipitation, wind) to complement user-provided datasets. The tool saves data as a Zarr store and CSV files.\n"
                     
             f"### Step-by-Step Workflow:\n"
             f"1. FIRST, call 'get_example_of_visualizations' with your task description to check for existing examples that match your needs. SECOND, ALWAYS call 'wise_agent' with a detailed description of your task and dataset to get additional insights and guidance. COMBINE BOTH INPUTS to create your solution: prioritize examples when they fit well but enhance with wise_agent insights; rely more on wise_agent when examples don't fit well. Based on BOTH tools' inputs, write code to generate the plot.\n"
@@ -109,6 +113,42 @@ class Prompts:
                            
             f"### Guidelines for Using Tools:\n"
             f"- ALWAYS call both get_example_of_visualizations and wise_agent for each task, in that order. When examples match your task well, use them as primary templates but enhance with wise_agent insights; when examples don't fit well, rely more on wise_agent while adapting useful elements from examples. If examples reference specific files, use corresponding files from dataset paths (e.g., dataset_1_path). Preserve sophisticated code unless adjustments are needed for compatibility.\n\n"
+            
+            f"### ERA5 Data Retrieval Guidelines:\n"
+            f"When working with climate data or when the user's datasets don't contain the necessary meteorological variables, you can use the retrieve_era5_data tool. This tool provides access to a comprehensive climate reanalysis dataset with global coverage and high temporal resolution.\n\n"
+            f"- **Available ERA5 variables include**: 2m_temperature, 10m_u_component_of_wind, 10m_v_component_of_wind, mean_sea_level_pressure, total_precipitation, total_cloud_cover, sea_surface_temperature, and 3D atmospheric variables like temperature, specific_humidity, u_component_of_wind, v_component_of_wind, geopotential, and vertical_velocity.\n"
+            f"- **Example usage**:\n"
+            f"```python\n"
+            f"# Retrieve ERA5 2m temperature data for Europe for January 2020\n"
+            f"era5_result = retrieve_era5_data(\n"
+            f"    variable_id='sea_surface_temperature',\n"
+            f"    start_date='2020-01-01',\n"
+            f"    end_date='2020-01-31',\n"
+            f"    min_latitude=35.0,\n"
+            f"    max_latitude=70.0,\n"
+            f"    min_longitude=-10.0,\n"
+            f"    max_longitude=40.0\n"
+            f")\n\n"
+            f"# Check if retrieval was successful and get path\n"
+            f"if era5_result['success']:\n"
+            f"    # Load the Zarr data with xarray\n" 
+            f"    import xarray as xr\n"
+            f"    ds_era5 = xr.open_zarr(era5_result['output_path_zarr'])\n"
+            f"    print(ds_era5) # Good to print to see the data structure\n"
+            f"    \n"
+            f"    # --- Perform further actions with ds_era5 in THIS SAME BLOCK ---\n"
+            f"    # Create a simple plot\n"
+            f"    import matplotlib.pyplot as plt\n"
+            f"    plt.figure(figsize=(12, 6))\n"
+            f"    data_variable_name = era5_result['variable']\n"
+            f"    ds_era5[data_variable_name].mean(dim='time').plot()\n"
+            f"    plt.title(f\"Mean {{{{data_variable_name}}}} - January 2020\")\n"
+            f"    plt.savefig(plot_path)\n"
+            f"    plt.show()\n"
+            f"    # Any other operations using ds_era5 should also be here\n"
+            f"else:\n"
+            f"    print(f\"Error retrieving ERA5 data: {{{{era5_result['error']}}}} \")\n"
+            f"```\n\n"
             
             f"### PATH HANDLING INSTRUCTIONS:\n"
             f"- Use exactly the dataset path variables provided in the dataset info.\n"
@@ -130,11 +170,9 @@ class Prompts:
             f"5. 🔴 If you create multiple plots, close all but the final one with plt.close() before saving\n"
             f"6. 🔴 CONSEQUENCES: If you don't use the EXACT `plt.savefig(plot_path)` command, the plot WILL NOT appear in the interface!\n\n"
 
-
             f"### ⚠️ CRITICAL INSTRUCTIONS FOR reflect_on_image tool ⚠️\n"
             f"1. Unless you recieve at least 7/10 score from the reflect image, DO NOT FINISH GENERATION.\n"
             f"1. In case if you recieved score below 6/10, call **wise_agent** and ask it to revise your code. In the query pass the fully generated code by yourself and response from the reflection tool.\n"
-
 
             f"### Error Handling:\n"
             f"- **NameError**: Check if a library import is missing or a variable is mistyped.\n"

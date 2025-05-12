@@ -58,6 +58,7 @@ from .search.publication_qa_tool import answer_publication_questions, Publicatio
 from .prompts import Prompts
 from .utils import generate_unique_image_path, escape_curly_braces, log_history_event
 from .config import API_KEY
+from .tools.era5_retrieval_tool import era5_retrieval_tool
 
 
 # 1. Search Agent and Tools
@@ -699,34 +700,74 @@ example_visualization_tool = StructuredTool.from_function(
 ########################################
 # 1) DEFINE THE TOOL FOR LISTING FILES #
 ########################################
-
 class ListPlottingDataFilesArgs(BaseModel):
-    # No arguments needed here if it just lists everything
-    dummy: str = Field(default="", description="(No arguments needed)")  
+    dummy_arg: str = Field(default="", description="(No arguments needed)")  
 
-def list_plotting_data_files(dummy: str = "") -> str:
+def list_plotting_data_files(dummy_arg: str = "") -> str:
     """
-    Lists all files and subdirectories under data/plotting_data.
-    Returns a single string containing each path on a new line.
+    Lists ALL files recursively from two sources:
+    1. The data/plotting_data directory (static resources)
+    2. All files in the current UUID sandbox directories (active datasets)
+    
+    Returns a flat list of all available file paths using relative paths.
     """
-    base_dir = os.path.join("data", "plotting_data")
-    all_paths = []
-
-    for root, dirs, files in os.walk(base_dir):
-        # Optionally skip hidden dirs/files, etc.
-        for filename in files:
-            rel_path = os.path.relpath(os.path.join(root, filename), start=base_dir)
-            all_paths.append(rel_path)
-
-    if not all_paths:
-        return "No files found in data/plotting_data."
-
-    return "Files under data/plotting_data:\n" + "\n".join(all_paths)
+    import os
+    import streamlit as st
+    
+    all_files = []
+    cwd = os.getcwd()
+    
+    # Part 1: List files from data/plotting_data
+    plotting_data_dir = os.path.join("data", "plotting_data")
+    if os.path.exists(plotting_data_dir):
+        for root, dirs, files in os.walk(plotting_data_dir):
+            for filename in files:
+                full_path = os.path.join(root, filename)
+                # Keep this as a relative path
+                all_files.append(f"STATIC: {full_path}")
+    
+    # Part 2: List all files from UUID sandbox directories
+    if "active_datasets" in st.session_state and st.session_state["active_datasets"]:
+        # Find all unique UUID sandbox parent directories
+        sandbox_dirs = set()
+        for doi in st.session_state["active_datasets"]:
+            dataset_path, _ = st.session_state["datasets_cache"].get(doi, (None, None))
+            if isinstance(dataset_path, str) and os.path.isdir(dataset_path):
+                # Get the parent sandbox UUID directory
+                parent_dir = os.path.dirname(os.path.abspath(dataset_path))
+                sandbox_dirs.add(parent_dir)
+        
+        # List all files from each UUID directory recursively
+        for sandbox_dir in sandbox_dirs:
+            if os.path.exists(sandbox_dir):
+                for root, dirs, files in os.walk(sandbox_dir):
+                    for filename in files:
+                        full_path = os.path.join(root, filename)
+                        # Convert to relative path by removing the cwd prefix
+                        if full_path.startswith(cwd):
+                            rel_path = full_path[len(cwd)+1:]  # +1 to remove leading slash
+                        else:
+                            rel_path = full_path
+                            
+                        # Use consistent forward slashes
+                        rel_path = rel_path.replace('\\', '/')
+                        
+                        # Include a prefix to distinguish ERA5 files
+                        if "era5_data" in rel_path:
+                            all_files.append(f"ERA5: {rel_path}")
+                        else:
+                            all_files.append(f"DATA: {rel_path}")
+    
+    # Return a simple list of all available files
+    if all_files:
+        return "Available files:\n" + "\n".join(all_files)
+    else:
+        return "No files found in plotting_data or active datasets."
 
 list_plotting_data_files_tool = StructuredTool.from_function(
     func=list_plotting_data_files,
     name="list_plotting_data_files",
-    description="Lists all files under data/plotting_data directory (including subfolders).",
+    description="Lists ALL available files recursively, including plotting resources, dataset files, and ERA5 data. Use this to see exactly what files you can work with.",
     args_schema=ListPlottingDataFilesArgs
 )
 
@@ -997,8 +1038,6 @@ def create_visualization_agent(user_query, datasets_info):
     llm = ChatOpenAI(api_key=API_KEY, model_name=st.session_state.model_name)
 
     # Create the CustomPythonREPLTool with sandbox paths
-    from src.agents import CustomPythonREPLTool, reflect_tool, install_package_tool
-    from src.agents import example_visualization_tool, list_plotting_data_files_tool
     repl_tool = CustomPythonREPLTool(datasets=datasets)
 
     # Define the tools available to the agent
@@ -1008,7 +1047,8 @@ def create_visualization_agent(user_query, datasets_info):
         install_package_tool,
         example_visualization_tool,
         list_plotting_data_files_tool,
-        wise_agent_tool
+        wise_agent_tool,
+        era5_retrieval_tool
     ]
     # Create the agent with the updated prompt and tools
     from langchain.agents import create_openai_tools_agent

@@ -61,7 +61,7 @@ def process_search_query(user_input: str, search_agent, session_data: dict):
             session_data["chat_history"].add_ai_message(message["content"])
 
     def get_truncated_chat_history(session_id):
-        truncated_messages = session_data["chat_history"].messages[-10:]
+        truncated_messages = session_data["chat_history"].messages[-20:]
         truncated_history = ChatMessageHistory(session_id=session_id)
         for msg in truncated_messages:
             if isinstance(msg, HumanMessage):
@@ -284,7 +284,7 @@ def create_and_invoke_supervisor_agent(user_query: str, datasets_info: list, mem
         else:
             messages.append(AIMessage(content=message["content"], name=message["role"]))
 
-    limited_messages = messages[-7:]
+    limited_messages = messages[-15:]
     initial_state = {
         "messages": limited_messages,
         "next": "supervisor",
