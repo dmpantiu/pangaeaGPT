@@ -67,7 +67,7 @@ def retrieve_era5_data(
 ) -> dict:
     """
     Retrieves a subset of the public ARCO-ERA5 Zarr dataset and saves it locally
-    as a NetCDF file and CSV file.
+    as a Zarr store.
     """
     try:
         logging.info(
@@ -203,45 +203,21 @@ def retrieve_era5_data(
         subset_ds.attrs['description'] = f"Subset of ERA5 {variable_id} for {start_date} to {end_date}"
         subset_ds.attrs['source'] = ARCO_ERA5_MAIN_ZARR_STORE
         
-        # 7) Save to NetCDF file
+        # 7) Define Zarr store path
         uid = uuid.uuid4().hex
-        nc_filename = f"{variable_id}_{uid}.nc"
-        nc_path = os.path.join(era5_dir, nc_filename)
-        
-        logging.info(f"Saving to NetCDF file: {nc_path}")
-        subset_ds.to_netcdf(nc_path)
-        
-        # 8) Also save to CSV for easier access
-        csv_filename = f"{variable_id}_{uid}.csv"
-        csv_path = os.path.join(era5_dir, csv_filename)
-        
-        logging.info(f"Converting to DataFrame and saving as CSV: {csv_path}")
-        try:
-            # Create a more manageable subset for CSV export (first 1000 rows max)
-            # For larger datasets, limit to 1000 rows to avoid massive CSV files
-            df = subset_ds.to_dataframe().reset_index()
-            if len(df) > 1000:
-                df = df.iloc[:1000]
-                logging.info(f"Limited CSV export to first 1000 rows (out of {len(df)})")
-            
-            df.to_csv(csv_path, index=False)
-            logging.info(f"Successfully saved to CSV: {csv_path}")
-        except Exception as csv_error:
-            logging.warning(f"Error saving to CSV (continuing anyway): {csv_error}")
-            csv_path = None
-        
-        # For backward compatibility with existing API
-        zarr_path = os.path.join(era5_dir, f"{variable_id}_{uid}.zarr")
-        
-        # 9) Return success with file paths
+        zarr_filename = f"{variable_id}_{uid}.zarr"
+        zarr_path = os.path.join(era5_dir, zarr_filename)
+
+        # 8) Save to Zarr store
+        logging.info(f"Saving to Zarr store: {zarr_path}")
+        subset_ds.to_zarr(zarr_path, mode='w') # Use mode='w' to overwrite if exists
+
+        # 9) Return success with Zarr file path
         return {
             "success": True,
-            "output_path_zarr": zarr_path,  # For backward compatibility
-            "output_path_netcdf": nc_path,  # Primary output 
-            "output_path_csv": csv_path,    # Secondary output
-            "variable_retrieved": variable_id, # For backward compatibility
-            "variable": variable_id,        # For convenient reference
-            "message": f"ERA5 {variable_id} data retrieved successfully"
+            "output_path_zarr": zarr_path,
+            "variable": variable_id,
+            "message": f"ERA5 {variable_id} data retrieved and saved as Zarr successfully to {zarr_path}"
         }
 
     except Exception as e:
@@ -264,7 +240,7 @@ era5_retrieval_tool = StructuredTool.from_function(
     description=(
         "Retrieves a subset of the ARCO-ERA5 Zarr climate reanalysis dataset "
         "for a given variable, time range, spatial bounds, and optional pressure level. "
-        "Returns paths to the saved data files (NetCDF and CSV)."
+        "Saves the data as a Zarr store and returns the path to it."
     ),
     args_schema=ERA5RetrievalArgs
 )

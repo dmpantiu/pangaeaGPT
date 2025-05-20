@@ -102,7 +102,7 @@ def retrieve_copernicus_marine_data(
 ) -> dict:
     """
     Retrieves oceanographic data from the Copernicus Marine Service and saves it locally
-    as NetCDF and CSV files.
+    as a NetCDF file.
     
     Args:
         dataset_id: The Copernicus Marine dataset ID
@@ -197,31 +197,13 @@ def retrieve_copernicus_marine_data(
         dataset.to_netcdf(nc_path)
         logging.info(f"Successfully saved to NetCDF: {nc_path}")
         
-        # 4) Also save first variable to CSV for easier access
-        csv_filename = f"{short_name}_{uid}.csv"
-        csv_path = os.path.join(copernicus_dir, csv_filename)
-        
-        try:
-            # Just flatten to DataFrame and save
-            df = dataset.to_dataframe().reset_index()
-            # Limit rows to avoid huge files
-            if len(df) > 1000:
-                df = df.iloc[:1000]
-            
-            df.to_csv(csv_path, index=False)
-            logging.info(f"Successfully saved to CSV: {csv_path}")
-        except Exception as csv_error:
-            logging.warning(f"Error saving to CSV (continuing anyway): {csv_error}")
-            csv_path = None
-        
-        # 5) Return success with file paths
+        # 4) Return success with NetCDF file path
         return {
             "success": True,
             "output_path_netcdf": nc_path,
-            "output_path_csv": csv_path,
             "dataset_id": dataset_id,
             "variables": variables_info,
-            "message": "Copernicus Marine data downloaded successfully"
+            "message": f"Copernicus Marine data for {dataset_id} downloaded and saved as NetCDF successfully to {nc_path}"
         }
         
     except Exception as e:
@@ -236,6 +218,6 @@ def retrieve_copernicus_marine_data(
 copernicus_marine_tool = StructuredTool.from_function(
     func=retrieve_copernicus_marine_data,
     name="retrieve_copernicus_marine_data",
-    description="Retrieves oceanographic data from the Copernicus Marine Service for a given dataset ID, variables, time range, and spatial bounds.",
+    description="Retrieves oceanographic data from the Copernicus Marine Service for a given dataset ID, variables, time range, and spatial bounds. Saves data as NetCDF.",
     args_schema=CopernicusMarineRetrievalArgs
 )
